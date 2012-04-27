@@ -21,24 +21,26 @@
 	</extension>
 	<extension
          point="org.eclipse.ui.views">
-		<view
-            name="View"
-            class="mishanesterenko.changevisualizer.View"
-            id="changeVisualizer.view">
-		</view>
+  <view
+        class="org.eclipse.ui.navigator.CommonNavigator"
+        icon="icons/sample.gif"
+        id="changeVisualizer.view.projectsView"
+        name="Projects">
+  </view>
 	</extension>
 	<extension
          point="org.eclipse.ui.perspectiveExtensions">
-		<perspectiveExtension
-            targetID="*">
-			<view
-               standalone="true"
-               minimized="false"
-               relative="org.eclipse.ui.editorss"
-               relationship="left"
-               id="changeVisualizer.view">
-			</view>
-		</perspectiveExtension>
+    <perspectiveExtension
+          targetID="changeVisualizer.perspective">
+       <view
+             closeable="true"
+             id="changeVisualizer.view.projectsView"
+             minimized="false"
+             ratio="0.25"
+             relationship="left"
+             relative="org.eclipse.ui.editorss">
+       </view>
+    </perspectiveExtension>
 	</extension>
 	<extension
          point="org.eclipse.ui.menus">
@@ -73,10 +75,38 @@
     </category>
     <wizard
           category="changeVisualizer.wizardcategory.changevisualizations"
-          class="changevisualizer.wizard.SvnWizard"
+          class="mishanesterenko.changevisualizer.wizard.SvnWizard"
           id="changeVisualizer.wizard.svnwizard"
           name="SVN Visualization Project">
     </wizard>
+ </extension>
+ <extension
+       point="org.eclipse.ui.navigator.viewer">
+    <viewerActionBinding
+          viewerId="changeVisualizer.view.projectsView">
+       <includes>
+          <actionExtension
+                pattern="org.eclipse.ui.navigator.resources.*">
+          </actionExtension>
+       </includes>
+    </viewerActionBinding>
+    <viewerContentBinding
+          viewerId="changeVisualizer.view.projectsView">
+       <includes>
+          <contentExtension
+                pattern="org.eclipse.ui.navigator.resourceContent">
+          </contentExtension>
+          <contentExtension
+                pattern="org.eclipse.ui.navigator.resources.filters.*">
+          </contentExtension>
+          <contentExtension
+                pattern="org.eclipse.ui.navigator.resources.linkHelper">
+          </contentExtension>
+          <contentExtension
+                pattern="org.eclipse.ui.navigator.resources.workingSets">
+          </contentExtension>
+       </includes>
+    </viewerContentBinding>
  </extension>
 
 </plugin>

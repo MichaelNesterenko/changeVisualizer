@@ -4,5 +4,6 @@ Bundle-Name: ChangeVisualizer
 Bundle-SymbolicName: changeVisualizer; singleton:=true
 Bundle-Version: 1.0.0.qualifier
 Require-Bundle: org.eclipse.core.runtime,
- org.eclipse.ui
+ org.eclipse.ui,
+ org.eclipse.ui.ide
 Bundle-RequiredExecutionEnvironment: JavaSE-1.6

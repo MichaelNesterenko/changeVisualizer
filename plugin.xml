@@ -58,12 +58,25 @@
          point="org.eclipse.core.runtime.products">
 		<product
             application="changeVisualizer.application"
-            name="RCP Application">
+            name="Change Visualizer">
 			<property
                name="windowImages"
                value="icons/alt_window_16.gif,icons/alt_window_32.gif">
 			</property>
 		</product>
 	</extension>
+ <extension
+       point="org.eclipse.ui.newWizards">
+    <category
+          id="changeVisualizer.wizardcategory.changevisualizations"
+          name="Change Visualizations">
+    </category>
+    <wizard
+          category="changeVisualizer.wizardcategory.changevisualizations"
+          class="changevisualizer.wizard.SvnWizard"
+          id="changeVisualizer.wizard.svnwizard"
+          name="SVN Visualization Project">
+    </wizard>
+ </extension>
 
 </plugin>

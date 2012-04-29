@@ -1,38 +1,16 @@
 package mishanesterenko.changevisualizer.wizard;
 
+import mishanesterenko.changevisualizer.nature.Svn;
+import mishanesterenko.changevisualizer.wizard.page.ProjectBasicSettingsPage;
+
 import org.eclipse.jface.viewers.IStructuredSelection;
-import org.eclipse.jface.wizard.Wizard;
-import org.eclipse.ui.INewWizard;
 import org.eclipse.ui.IWorkbench;
-import org.eclipse.ui.dialogs.WizardNewProjectCreationPage;
 
-public class SvnWizard extends Wizard implements INewWizard {
-
-    /**
-     * 
-     */
-    private static final String PAGE_NAME = "Svn Wizard"; //$NON-NLS-1$
-
+public class SvnWizard extends BaseWizard {
     /**
      * 
      */
     private static final String WIZARD_TITLE = "New SVN project"; //$NON-NLS-1$
-
-    private WizardNewProjectCreationPage _pageOne;
-
-    public SvnWizard() {
-        setWindowTitle(WIZARD_TITLE);
-    }
-
-    @Override
-    public void addPages() {
-        super.addPages();
-        _pageOne = new WizardNewProjectCreationPage(PAGE_NAME);
-        _pageOne.setTitle(WizardMessages.SvnWizard_location_page_title);
-        _pageOne.setDescription(WizardMessages.SvnWizard_location_page_description);
-
-        addPage(_pageOne);
-    }
 
     @Override
     public void init(IWorkbench workbench, IStructuredSelection selection) {
@@ -41,9 +19,21 @@ public class SvnWizard extends Wizard implements INewWizard {
     }
 
     @Override
-    public boolean performFinish() {
-        // TODO Auto-generated method stub
-        return true;
+    protected String getWizardTitle() {
+        return WIZARD_TITLE;
+    }
+
+    @Override
+    protected String[] getProjectNatures() {
+        return new String[] {Svn.ID};
+    }
+
+    @Override
+    protected ProjectBasicSettingsPage createBasicSettingsPage() {
+        ProjectBasicSettingsPage page = super.createBasicSettingsPage();
+        page.setTitle(WizardMessages.SvnWizard_location_page_title);
+        page.setDescription(WizardMessages.SvnWizard_location_page_description);
+        return page;
     }
 
 }

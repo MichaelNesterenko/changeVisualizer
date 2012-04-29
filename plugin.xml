@@ -76,37 +76,46 @@
     <wizard
           category="changeVisualizer.wizardcategory.changevisualizations"
           class="mishanesterenko.changevisualizer.wizard.SvnWizard"
+          icon="icons/svn.png"
           id="changeVisualizer.wizard.svnwizard"
           name="SVN Visualization Project">
     </wizard>
  </extension>
- <extension
-       point="org.eclipse.ui.navigator.viewer">
-    <viewerActionBinding
-          viewerId="changeVisualizer.view.projectsView">
+ <extension point="org.eclipse.ui.navigator.viewer">
+    <viewer viewerId="changeVisualizer.view.projectsView" />
+    <viewerActionBinding viewerId="changeVisualizer.view.projectsView">
        <includes>
           <actionExtension
                 pattern="org.eclipse.ui.navigator.resources.*">
           </actionExtension>
        </includes>
     </viewerActionBinding>
-    <viewerContentBinding
-          viewerId="changeVisualizer.view.projectsView">
+    <viewerContentBinding viewerId="changeVisualizer.view.projectsView">
        <includes>
-          <contentExtension
-                pattern="org.eclipse.ui.navigator.resourceContent">
-          </contentExtension>
-          <contentExtension
-                pattern="org.eclipse.ui.navigator.resources.filters.*">
-          </contentExtension>
-          <contentExtension
-                pattern="org.eclipse.ui.navigator.resources.linkHelper">
-          </contentExtension>
-          <contentExtension
-                pattern="org.eclipse.ui.navigator.resources.workingSets">
-          </contentExtension>
+          <contentExtension pattern="org.eclipse.ui.navigator.resourceContent" />
+          <contentExtension pattern="org.eclipse.ui.navigator.resources.filters.*" />
+          <contentExtension pattern="org.eclipse.ui.navigator.resources.linkHelper" />
+          <contentExtension pattern="org.eclipse.ui.navigator.resources.workingSets" />
        </includes>
     </viewerContentBinding>
+ </extension>
+ <extension
+       id="changeVisualizer.nature.svn"
+       name="Svn project"
+       point="org.eclipse.core.resources.natures">
+    <runtime>
+       <run
+             class="mishanesterenko.changevisualizer.nature.Svn">
+       </run>
+    </runtime>
+ </extension>
+ <extension
+       point="org.eclipse.ui.ide.projectNatureImages">
+    <image
+          icon="icons/svn.png"
+          id="changeVisualizer.nature.svn.image"
+          natureId="changeVisualizer.nature.svn">
+    </image>
  </extension>
 
 </plugin>

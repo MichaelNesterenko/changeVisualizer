@@ -38,6 +38,9 @@ public class ProjectBasicSettingsPage extends WizardNewProjectCreationPage imple
                 public void run(IProgressMonitor monitor) throws InvocationTargetException, InterruptedException {
                     try {
                         project.create(description, monitor);
+                        if (!project.isOpen()) {
+                            project.open(monitor);
+                        }
                     } catch (Exception e) {
                         throw new InvocationTargetException(e);
                     }

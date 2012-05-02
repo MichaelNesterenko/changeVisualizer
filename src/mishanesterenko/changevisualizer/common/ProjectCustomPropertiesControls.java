@@ -49,7 +49,7 @@ public class ProjectCustomPropertiesControls {
         { // password
             Label mylabel = new Label(myComposite, SWT.NONE);
             mylabel.setLayoutData(new GridData());
-            mylabel.setText("Username:");
+            mylabel.setText("Password:");
             userPassword = new Text(myComposite, SWT.BORDER);
             userPassword.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
         }

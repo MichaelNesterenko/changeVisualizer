@@ -22,14 +22,8 @@ public class DeleteResourceCommandHandler extends AbstractHandler {
     public Object execute(ExecutionEvent event) throws ExecutionException {
         IWorkbenchWindow activeWindow = HandlerUtil.getActiveWorkbenchWindow(event);
         final ISelectionService selectionService = activeWindow.getSelectionService();
-        final Shell shell = activeWindow.getShell();
 
-        DeleteResourceAction deleteAction = new DeleteResourceAction(new IShellProvider() {
-            @Override
-            public Shell getShell() {
-                return shell;
-            }
-        }) {
+        DeleteResourceAction deleteAction = new DeleteResourceAction(new CustomShellProvider(activeWindow)) {
             @Override
             public IStructuredSelection getStructuredSelection() {
                 IStructuredSelection selection = (IStructuredSelection) selectionService.getSelection();

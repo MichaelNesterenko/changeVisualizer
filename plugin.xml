@@ -13,27 +13,14 @@
             id="changeVisualizer.perspective">
 		</perspective>
 	</extension>
-	<extension
-         point="org.eclipse.ui.views">
-  <view
-        class="org.eclipse.ui.navigator.CommonNavigator"
-        id="changeVisualizer.view.projectsView"
-        name="Projects">
-  </view>
+	<extension point="org.eclipse.ui.views">
+        <view class="org.eclipse.ui.navigator.CommonNavigator" id="changeVisualizer.view.projectsView" name="Projects" />
 	</extension>
-	<extension
-         point="org.eclipse.ui.perspectiveExtensions">
-    <perspectiveExtension
-          targetID="changeVisualizer.perspective">
-       <view
-             closeable="true"
-             id="changeVisualizer.view.projectsView"
-             minimized="false"
-             ratio="0.25"
-             relationship="left"
-             relative="org.eclipse.ui.editorss">
-       </view>
-    </perspectiveExtension>
+	<extension point="org.eclipse.ui.perspectiveExtensions">
+        <perspectiveExtension targetID="changeVisualizer.perspective">
+            <view closeable="true" id="changeVisualizer.view.projectsView" minimized="false" ratio="0.25" relationship="left"
+                relative="org.eclipse.ui.editorss" />
+        </perspectiveExtension>
     </extension>
 	<extension point="org.eclipse.ui.menus">
 		<menuContribution locationURI="menu:org.eclipse.ui.main.menu">
@@ -41,40 +28,36 @@
 				<command commandId="org.eclipse.ui.file.exit" label="Exit" />
 			</menu>
 			<menu label="Window">
-		      <command commandId="org.eclipse.ui.views.showView" label = "Show views"/>
+		      <command commandId="org.eclipse.ui.views.showView"/>
 			</menu>
 		</menuContribution>
-    <menuContribution locationURI="popup:changeVisualizer.view.projectsView.popup#PopupMenu?after=additions">
-        <command commandId="org.eclipse.ui.edit.delete" style="push" >
-            <visibleWhen checkEnabled="false">
-                <adapt type="java.util.Collection">
-                    <count value="1" />
-                </adapt>
-            </visibleWhen>
-        </command>
-    </menuContribution>
+        <menuContribution locationURI="popup:changeVisualizer.view.projectsView.popup#PopupMenu?after=additions">
+            <command commandId="org.eclipse.ui.edit.delete" style="push" >
+                <visibleWhen checkEnabled="false">
+                    <adapt type="java.util.Collection">
+                        <count value="1" />
+                    </adapt>
+                </visibleWhen>
+            </command>
+        </menuContribution>
+        <menuContribution locationURI="popup:changeVisualizer.view.projectsView.popup#PopupMenu?after=properties">
+            <command commandId="org.eclipse.ui.file.properties">
+                <visibleWhen checkEnabled="false">
+                    <adapt type="java.util.Collection">
+                        <count value="1" />
+                    </adapt>
+                </visibleWhen>
+            </command>
+        </menuContribution>
 	</extension>
-	<extension
-         id="product"
-         point="org.eclipse.core.runtime.products">
-		<product
-            application="changeVisualizer.application"
-            name="Change Visualizer">
-			<property
-               name="windowImages"
-               value="icons/alt_window_16.gif,icons/alt_window_32.gif">
-			</property>
-   <property
-         name="appName"
-         value="Change Visualizer">
-   </property>
+	<extension id="product" point="org.eclipse.core.runtime.products">
+		<product application="changeVisualizer.application" name="Change Visualizer">
+			<property name="windowImages" value="icons/alt_window_16.gif,icons/alt_window_32.gif" />
+            <property name="appName" value="Change Visualizer" />
 		</product>
 	</extension>
- <extension
-       point="org.eclipse.ui.newWizards">
-    <category
-          id="changeVisualizer.wizardcategory.changevisualizations"
-          name="Change Visualizations">
+ <extension point="org.eclipse.ui.newWizards">
+    <category id="changeVisualizer.wizardcategory.changevisualizations" name="Change Visualizations">
     </category>
     <wizard
           category="changeVisualizer.wizardcategory.changevisualizations"
@@ -88,14 +71,15 @@
     <viewer viewerId="changeVisualizer.view.projectsView">
         <popupMenu allowsPlatformContributions="true" id="changeVisualizer.view.projectsView.popup#PopupMenu">
             <insertionPoint name="group.new" />
-            <insertionPoint name="additions" />
+            <insertionPoint name="additions" separator="true"/>
+            <insertionPoint name="properties" separator="true"/>
        </popupMenu>
     </viewer>
     <viewerActionBinding viewerId="changeVisualizer.view.projectsView">
        <includes>
-        <actionExtension pattern="org.eclipse.ui.navigator.resources.NewActions" />
-        <actionExtension pattern="mishanesterenko.changevisualizer.action.provider.CustomNewActionProvider" />
-          <!--actionExtension pattern="mishanesterenko.changevisualizer.action.provider.CustomRefreshActionProvider" /-->
+            <actionExtension pattern="org.eclipse.ui.navigator.resources.NewActions" />
+            <actionExtension pattern="mishanesterenko.changevisualizer.action.provider.CustomNewActionProvider" />
+            <actionExtension pattern="org.eclipse.ui.navigator.resources.PropertiesActionProvider"/>
        </includes>
     </viewerActionBinding>
     <viewerContentBinding viewerId="changeVisualizer.view.projectsView">
@@ -112,43 +96,30 @@
        name="Svn project"
        point="org.eclipse.core.resources.natures">
     <runtime>
-       <run
-             class="mishanesterenko.changevisualizer.nature.Svn">
-       </run>
+       <run class="mishanesterenko.changevisualizer.nature.Svn" />
     </runtime>
  </extension>
  <extension point="org.eclipse.ui.ide.projectNatureImages">
-    <image
-          icon="icons/svn.png"
-          id="changeVisualizer.nature.svn.image"
-          natureId="changeVisualizer.nature.svn" />
+    <image icon="icons/svn.png" id="changeVisualizer.nature.svn.image" natureId="changeVisualizer.nature.svn" />
  </extension>
  <extension point="org.eclipse.ui.activities">
     <activity id="changeVisualizer.activity.disableStandard" name="Disables inherited standard features" />
-    <activityPatternBinding
-          activityId="changeVisualizer.activity.disableStandard"
-          isEqualityPattern="false"
+    <activityPatternBinding activityId="changeVisualizer.activity.disableStandard" isEqualityPattern="false"
           pattern="org\.eclipse\.ui\.ide/org\.eclipse\.ui\.wizards\.new\..*" />
-    <activityPatternBinding
-          activityId="changeVisualizer.activity.disableStandard"
-          isEqualityPattern="true"
+    <activityPatternBinding activityId="changeVisualizer.activity.disableStandard" isEqualityPattern="true"
           pattern="org.eclipse.ui.editors/org.eclipse.ui.editors.wizards.UntitledTextFileWizard" />
-    <activityPatternBinding
-          activityId="changeVisualizer.activity.disableStandard"
-          isEqualityPattern="false"
+    <activityPatternBinding activityId="changeVisualizer.activity.disableStandard" isEqualityPattern="false"
           pattern="org\.eclipse\.ui\.ide/org\.eclipse\.ui\.views\..*" />
-    <activityPatternBinding
-          activityId="changeVisualizer.activity.disableStandard"
-          isEqualityPattern="false"
+    <activityPatternBinding activityId="changeVisualizer.activity.disableStandard" isEqualityPattern="false"
           pattern="org\.eclipse\.ui\.views/org\.eclipse\.ui\.views\..*" /> 
-    <activityPatternBinding
-          activityId="changeVisualizer.activity.disableStandard"
-          isEqualityPattern="false"
-          pattern="org\.eclipse\.ui\.navigator\.resources/org\.eclipse\.ui\.navigator\..*" />
-    <activityPatternBinding
-          activityId="changeVisualizer.activity.disableStandard"
-          isEqualityPattern="false"
+    <activityPatternBinding activityId="changeVisualizer.activity.disableStandard" isEqualityPattern="true"
+          pattern="org.eclipse.ui.navigator.resources/org.eclipse.ui.navigator.ProjectExplorer" />
+    <activityPatternBinding activityId="changeVisualizer.activity.disableStandard" isEqualityPattern="false"
           pattern="org\.eclipse\.team\.ui/org\.eclipse\.team\..*" />
+    <activityPatternBinding activityId="changeVisualizer.activity.disableStandard" isEqualityPattern="false"
+          pattern="org\.eclipse\.ui\.ide/org\.eclipse\.ui\.propertypages\..*" />
+    <activityPatternBinding activityId="changeVisualizer.activity.disableStandard" isEqualityPattern="true"
+          pattern="org.eclipse.ltk.ui.refactoring/org.eclipse.ltk.ui.refactoring.property.page" />
  </extension>
  <extension point="org.eclipse.ui.navigator.navigatorContent">
     <navigatorContent
@@ -161,8 +132,7 @@
           <instanceof value="org.eclipse.core.resources.IWorkspaceRoot" />
        </triggerPoints>
        <possibleChildren>
-         <instanceof
-               value="mishanesterenko.changevisualizer.projectmodel.CustomProject">
+         <instanceof value="mishanesterenko.changevisualizer.projectmodel.CustomProject">
          </instanceof>
        </possibleChildren>
        <actionProvider class="mishanesterenko.changevisualizer.action.provider.CustomNewActionProvider"
@@ -195,7 +165,13 @@
     </handler>
  </extension>
  <extension
-       point="org.eclipse.ui.popupMenus">
+       point="org.eclipse.ui.propertyPages">
+    <page class="mishanesterenko.changevisualizer.propertypage.SvnPropertyPage" id="changeVisualizer.property.svnProperties"
+          name="Svn Repository" selectionFilter="single">
+          <enabledWhen>
+             <instanceof value="mishanesterenko.changevisualizer.projectmodel.CustomProject" />
+          </enabledWhen>
+    </page>
  </extension>
 
 </plugin>

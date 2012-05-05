@@ -15,10 +15,15 @@
 	</extension>
 	<extension point="org.eclipse.ui.views">
         <view class="org.eclipse.ui.navigator.CommonNavigator" id="changeVisualizer.view.projectsView" name="Projects" />
+        <view class="mishanesterenko.changevisualizer.view.HistoryView" id="changeVisualizer.view.history" name="Commits" />
 	</extension>
 	<extension point="org.eclipse.ui.perspectiveExtensions">
         <perspectiveExtension targetID="changeVisualizer.perspective">
-            <view closeable="true" id="changeVisualizer.view.projectsView" minimized="false" ratio="0.25" relationship="left"
+            <view closeable="true" id="changeVisualizer.view.projectsView" minimized="false" ratio="0.35" relationship="left"
+                relative="org.eclipse.ui.editorss" />
+        </perspectiveExtension>
+        <perspectiveExtension targetID="changeVisualizer.perspective">
+            <view closeable="true" id="changeVisualizer.view.history" minimized="false" ratio="0.55" relationship="top"
                 relative="org.eclipse.ui.editorss" />
         </perspectiveExtension>
     </extension>

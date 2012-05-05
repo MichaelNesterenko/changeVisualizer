@@ -4,6 +4,7 @@ import org.osgi.framework.BundleContext;
 
 
 public class ChangeVisualizerPlugin extends AbstractUIPlugin {
+    public static final String PLUGIN_ID = "changeVisualizer";
 
     private static ChangeVisualizerPlugin plugin;
 

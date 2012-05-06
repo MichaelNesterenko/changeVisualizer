@@ -19,7 +19,7 @@
 	</extension>
 	<extension point="org.eclipse.ui.perspectiveExtensions">
         <perspectiveExtension targetID="changeVisualizer.perspective">
-            <view closeable="true" id="changeVisualizer.view.projectsView" minimized="false" ratio="0.35" relationship="left"
+            <view closeable="true" id="changeVisualizer.view.projectsView" minimized="false" ratio="0.15" relationship="left"
                 relative="org.eclipse.ui.editorss" />
         </perspectiveExtension>
         <perspectiveExtension targetID="changeVisualizer.perspective">

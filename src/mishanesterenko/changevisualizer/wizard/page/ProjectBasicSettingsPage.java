@@ -96,7 +96,7 @@ public class ProjectBasicSettingsPage extends WizardNewProjectCreationPage imple
                 throw (CoreException) e.getCause();
             }
             IStatus status = new Status(IStatus.ERROR,
-                    ChangeVisualizerPlugin.getPlugin().getBundle().getSymbolicName(),
+                    ChangeVisualizerPlugin.PLUGIN_ID,
                     NLS.bind(WizardMessages.ProjectBasicSettingsPage_can_not_create_project, project.getName()),
                     cause);
             throw new CoreException(status);

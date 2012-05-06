@@ -1,57 +1,75 @@
 package mishanesterenko.changevisualizer.view;
 
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import mishanesterenko.changevisualizer.activator.ChangeVisualizerPlugin;
 import mishanesterenko.changevisualizer.projectmodel.CustomProject;
-
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.NullProgressMonitor;
+import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.MenuManager;
 import org.eclipse.jface.action.Separator;
+import org.eclipse.jface.dialogs.ProgressMonitorDialog;
+import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.ISelection;
-import org.eclipse.jface.viewers.IStructuredContentProvider;
+import org.eclipse.jface.viewers.ISelectionChangedListener;
 import org.eclipse.jface.viewers.IStructuredSelection;
-import org.eclipse.jface.viewers.ITableLabelProvider;
 import org.eclipse.jface.viewers.LabelProvider;
+import org.eclipse.jface.viewers.ListViewer;
+import org.eclipse.jface.viewers.SelectionChangedEvent;
 import org.eclipse.jface.viewers.TableViewer;
 import org.eclipse.jface.viewers.TableViewerColumn;
 import org.eclipse.jface.viewers.Viewer;
+import org.eclipse.jface.viewers.ViewerComparator;
+import org.eclipse.jface.viewers.ViewerFilter;
+import org.eclipse.jface.viewers.ViewerSorter;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Image;
-import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Event;
+import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
-import org.eclipse.swt.widgets.Listener;
-import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.TableColumn;
-import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
 import org.eclipse.ui.ISelectionListener;
-import org.eclipse.ui.ISharedImages;
 import org.eclipse.ui.IWorkbenchPart;
-import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.part.ViewPart;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
+import org.eclipse.ui.statushandlers.IStatusAdapterConstants;
+import org.eclipse.ui.statushandlers.StatusAdapter;
+import org.eclipse.ui.statushandlers.StatusManager;
+import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.layout.GridData;
+import org.osgi.framework.BundleContext;
+import org.osgi.framework.ServiceReference;
+import org.osgi.service.event.Event;
+import org.osgi.service.event.EventAdmin;
 import org.tmatesoft.svn.core.SVNException;
 import org.tmatesoft.svn.core.SVNLogEntry;
+import org.tmatesoft.svn.core.SVNLogEntryPath;
 import org.tmatesoft.svn.core.SVNURL;
 import org.tmatesoft.svn.core.auth.ISVNAuthenticationManager;
 import org.tmatesoft.svn.core.io.SVNRepository;
@@ -60,6 +78,12 @@ import org.tmatesoft.svn.core.wc.SVNWCUtil;
 
 public class HistoryView extends ViewPart {
     public static final String ID = "changeVisualizer.view.history";
+
+    public static final String LOG_ENTRY_KEY = "logEntry";
+
+    public static final String LOG_ENTRY_PATH_KEY = "logEntryPath";
+
+    public static final String VISUALIZATOR_TOPIC = "changeVisualizer/render";
 
     private Color errorColor;
 
@@ -73,11 +97,11 @@ public class HistoryView extends ViewPart {
 
     private int showCommitCount = 100;
 
-    private String searchText;
+    private String searchText = "";
 
     private Text searchTextInput;
 
-    private Button goButton;
+    private Button filterCommitListButton;
 
     private int errorCount;
 
@@ -89,6 +113,13 @@ public class HistoryView extends ViewPart {
 
     private Text showCommitCountInput;
 
+    private Text commitDetailedMessageInput;
+
+    private ListViewer changedPathsViewer;
+
+    private EventAdmin messageService;
+    private Button updateCommitListButton;
+
     public HistoryView() {
         ImageDescriptor id = AbstractUIPlugin.imageDescriptorFromPlugin(ChangeVisualizerPlugin.PLUGIN_ID, "icons/searchtype.png");
         searchTypeImage = id.createImage();
@@ -97,6 +128,9 @@ public class HistoryView extends ViewPart {
     @Override
     public void createPartControl(Composite parent) {
         errorColor = getSite().getShell().getDisplay().getSystemColor(SWT.COLOR_RED);
+        BundleContext ctx = ChangeVisualizerPlugin.getPlugin().getBundle().getBundleContext();
+        ServiceReference<EventAdmin> sr = ctx.getServiceReference(EventAdmin.class);
+        messageService = ctx.getService(sr);
 
         GridLayout gl_parent = new GridLayout(1, false);
         gl_parent.verticalSpacing = 0;
@@ -106,10 +140,10 @@ public class HistoryView extends ViewPart {
         parent.setLayout(gl_parent);
 
         createTopPanel(parent);
-        createHistoryTable(parent);
+        createMiddlePanel(parent);
         createBottomPanel(parent);
 
-        getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(selectionHandler = new SelectionHandler());
+        getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(selectionHandler = new ProjectSelectionHandler());
     }
 
     private MenuManager createSearchTypeMenu() {
@@ -154,7 +188,9 @@ public class HistoryView extends ViewPart {
 
         { // search input
             searchTextInput = new Text(panel, SWT.BORDER);
+            searchTextInput.setEnabled(false);
             searchTextInput.setLayoutData(new GridData(GridData.FILL, GridData.CENTER, true, false));
+            searchTextInput.setText(searchText);
             searchTextInput.addModifyListener(searchTextValidator = new SearchTextInputValidator() {
                 @Override
                 public void modifyText(ModifyEvent e) {
@@ -165,10 +201,12 @@ public class HistoryView extends ViewPart {
         }
 
         { // go button
-            goButton = new Button(panel, SWT.PUSH);
-            goButton.addSelectionListener(new GoButtonClickHandler());
-            goButton.setText("Go");
-            goButton.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, false, false));
+            filterCommitListButton = new Button(panel, SWT.PUSH);
+            filterCommitListButton.setEnabled(false);
+            filterCommitListButton.addSelectionListener(new FilterButtonClickHandler());
+            filterCommitListButton.setText("Filter");
+            filterCommitListButton.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, false, false));
+            filterCommitListButton.addSelectionListener(new FilterButtonClickHandler());
         }
     }
 
@@ -179,39 +217,10 @@ public class HistoryView extends ViewPart {
         table.setHeaderVisible(true);
         table.setLinesVisible(true);
 
-//        Listener paintListener = new Listener() {
-//            @Override
-//            public void handleEvent(Event event) {
-//                switch (event.type) {
-//                case SWT.MeasureItem: {
-//                    TableItem item = (TableItem) event.item;
-//                    String text = item.getText(event.index).replace("\n", "\n|");//getText(item, event.index);
-//                    Point size = event.gc.textExtent(text);
-//                    event.width = size.x;
-//                    event.height = Math.max(event.height, size.y);
-//                    break;
-//                }
-//                case SWT.PaintItem: {
-//                    TableItem item = (TableItem) event.item;
-//                    String text = item.getText(event.index).replace("\n", "\n|");//getText(item, event.index);
-//                    Point size = event.gc.textExtent(text);
-//                    int offset2 = event.index == 0 ? Math.max(0, (event.height - size.y) / 2) : 0;
-//                    event.gc.drawText(text, event.x, event.y + offset2, true);
-//                    break;
-//                }
-//                case SWT.EraseItem: {
-//                    event.detail &= ~SWT.FOREGROUND;
-//                    break;
-//                }
-//                }
-//            }
-//        };
-//
-//        table.addListener(SWT.MeasureItem, paintListener);
-//        table.addListener(SWT.PaintItem, paintListener);
-//        table.addListener(SWT.EraseItem, paintListener);
-
         commitViewer.setContentProvider(ArrayContentProvider.getInstance());
+        commitViewer.addSelectionChangedListener(new CommitSelectionHandler());
+        commitViewer.setFilters(new ViewerFilter[] { new CommitTableFilter() });
+        commitViewer.setComparator(new CommitTableSorter());
 
         TableViewerColumn column = createTableViewerColumn("Revision", 100, 0);
         column.setLabelProvider(new ColumnLabelProvider() {
@@ -231,14 +240,64 @@ public class HistoryView extends ViewPart {
             }
         });
 
-        column = createTableViewerColumn("Message", 500, 2);
+        column = createTableViewerColumn("Date", 100, 2);
         column.setLabelProvider(new ColumnLabelProvider() {
             @Override
             public String getText(Object element) {
                 SVNLogEntry logEntry = (SVNLogEntry) element;
-                return logEntry.getMessage().replace("\n", " ");
+                return logEntry.getDate().toString();
             }
         });
+
+        column = createTableViewerColumn("Message", 500, 3);
+        column.setLabelProvider(new ColumnLabelProvider() {
+            @Override
+            public String getText(Object element) {
+                SVNLogEntry logEntry = (SVNLogEntry) element;
+                String message = logEntry.getMessage();
+                int nIndex = message.indexOf('\n');
+                int rIndex = message.indexOf('\r');
+                int val = rIndex < 0 || nIndex >= 0 && nIndex < rIndex ? nIndex : rIndex;
+                if (val >= 0) {
+                    message = message.substring(0, val);
+                }
+                return message;
+            }
+        });
+    }
+
+    protected void createChangedPathsList(final Composite parent) {
+        changedPathsViewer = new ListViewer(parent, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL);
+        changedPathsViewer.setContentProvider(ArrayContentProvider.getInstance());
+        changedPathsViewer.setLabelProvider(new LabelProvider() {
+            @Override
+            public String getText(Object element) {
+                SVNLogEntryPath path = (SVNLogEntryPath) element;
+                return path.getPath();
+            }
+        });
+    }
+
+    protected void createMiddlePanel(final Composite parent) {
+        Composite panel = new Composite(parent, SWT.NONE);
+        {
+            FillLayout fl = new FillLayout();
+            fl.marginHeight = 0;
+            fl.marginWidth = 0;
+            panel.setLayout(fl);
+            panel.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+        }
+
+        SashForm verticalSf = new SashForm(panel, SWT.VERTICAL);
+        SashForm horizontalSf = new SashForm(verticalSf, SWT.HORIZONTAL);
+
+        createHistoryTable(horizontalSf);
+        createChangedPathsList(horizontalSf);
+
+        commitDetailedMessageInput = new Text(verticalSf, SWT.BORDER | SWT.MULTI | SWT.V_SCROLL | SWT.H_SCROLL);
+        commitDetailedMessageInput.setEditable(false);
+
+        verticalSf.setWeights(new int[] {3, 1});
     }
 
     protected TableViewerColumn createTableViewerColumn(final String title, final int bound, final int colNumber) {
@@ -253,7 +312,7 @@ public class HistoryView extends ViewPart {
 
     protected void createBottomPanel(final Composite parent) {
         Composite panel = new Composite(parent, SWT.NONE);
-        panel.setLayout(new GridLayout(2, false));
+        panel.setLayout(new GridLayout(4, false));
         panel.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 
         {
@@ -262,11 +321,28 @@ public class HistoryView extends ViewPart {
             l.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, false, false));
 
             showCommitCountInput = new Text(panel, SWT.BORDER | SWT.SINGLE | SWT.RIGHT);
-            GridData gd_showCommitCountInput = new GridData(SWT.LEFT, SWT.CENTER, true, false);
-            gd_showCommitCountInput.minimumWidth = 50;
+            showCommitCountInput.setEnabled(false);
+            GridData gd_showCommitCountInput = new GridData(SWT.LEFT, SWT.CENTER, false, false);
+            gd_showCommitCountInput.widthHint = 50;
             showCommitCountInput.setLayoutData(gd_showCommitCountInput);
             showCommitCountInput.setText(Integer.toString(showCommitCount));
-            showCommitCountInput.addModifyListener(new CommitCountValidator());
+            {
+                updateCommitListButton = new Button(panel, SWT.NONE);
+                updateCommitListButton.setEnabled(false);
+                updateCommitListButton.setText("Update");
+                updateCommitListButton.addSelectionListener(new UpdateButtonClickHandler());
+            }
+            new Label(panel, SWT.NONE);
+            showCommitCountInput.addModifyListener(new CommitCountValidator() {
+                @Override
+                public boolean validate() {
+                    boolean isValid = super.validate();
+                    if (isValid) {
+                        showCommitCount = Integer.parseInt(showCommitCountInput.getText());
+                    }
+                    return isValid;
+                }
+            });
         }
     }
 
@@ -286,7 +362,8 @@ public class HistoryView extends ViewPart {
     }
 
     protected void updateValidStatus() {
-        goButton.setEnabled(isValid());
+        filterCommitListButton.setEnabled(isValid());
+        updateCommitListButton.setEnabled(isValid());
     }
 
     protected boolean isValid() {
@@ -304,21 +381,44 @@ public class HistoryView extends ViewPart {
         updateValidStatus();
     }
 
-    protected void performUpdateCommits() {
+    protected boolean performLoadCommits(final CustomProject project) {
         try {
-            updateCommits();
-        } catch (SVNException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
+            final boolean[] isCanceled = new boolean[] {true};
+            ProgressMonitorDialog progressDialog = new ProgressMonitorDialog(getSite().getShell());
+            progressDialog.run(true, true, new IRunnableWithProgress() {
+                @Override
+                public void run(final IProgressMonitor monitor) throws InvocationTargetException, InterruptedException {
+                    try {
+                        loadCommits(project, monitor);
+                        isCanceled[0] = monitor.isCanceled();
+                    } catch (SVNException e) {
+                        throw new InvocationTargetException(e);
+                    }
+                }
+            });
+            return !isCanceled[0];
+        } catch (Exception e) {
+            Throwable cause = e.getCause();
+            cause = cause == null ? e : cause;
+            IStatus status = new Status(IStatus.ERROR, ChangeVisualizerPlugin.PLUGIN_ID, cause.getMessage(), cause);
+
+            StatusAdapter statusAdapter = new StatusAdapter(status);
+            statusAdapter.setProperty(IStatusAdapterConstants.TITLE_PROPERTY, "Error");
+            StatusManager.getManager().handle(statusAdapter, StatusManager.BLOCK);
+            return false;
         }
     }
 
     @SuppressWarnings("unchecked")
-    protected void updateCommits() throws SVNException {
-        SVNRepository repository = SVNRepositoryFactory.create(SVNURL.parseURIDecoded(currentProject.getRepositoryLocation()));
+    protected void loadCommits(final CustomProject project, IProgressMonitor monitor) throws SVNException {
+        final int COMMIT_LOAD_PACK = 50;
+        monitor = monitor == null ? new NullProgressMonitor() : monitor;
+        monitor.beginTask("Loading commits from " + project.getRepositoryLocation(), showCommitCount);
+
+        SVNRepository repository = SVNRepositoryFactory.create(SVNURL.parseURIDecoded(project.getRepositoryLocation()));
         try {
-            ISVNAuthenticationManager authManager = SVNWCUtil.createDefaultAuthenticationManager(currentProject.getUsername(),
-                    currentProject.getUserPassword());
+            ISVNAuthenticationManager authManager = SVNWCUtil.createDefaultAuthenticationManager(project.getUsername(),
+                    project.getUserPassword());
             repository.setAuthenticationManager(authManager);
 
             Collection<SVNLogEntry> logEntries = repository.log(new String[] {""}, null, -1, -1, false, true);
@@ -328,24 +428,47 @@ public class HistoryView extends ViewPart {
                 logEntry = it.next();
                 break;
             }
+            if (monitor.isCanceled()) {
+                return;
+            }
+            final List<SVNLogEntry> logEntryArray = new ArrayList<SVNLogEntry>();
             if (logEntry != null) { 
-                long fromRevision = logEntry.getRevision() - showCommitCount;
-                logEntries = repository.log(new String[] {""}, null, fromRevision, -1, true, true);
-                while (fromRevision > 1 && logEntries.size() < showCommitCount) {
-                    long probableRevision = fromRevision - (showCommitCount - logEntries.size());
+                long fromRevision = logEntry.getRevision();// - (showCommitCount - 1);
+                //logEntries = repository.log(new String[] {""}, null, fromRevision, -1, true, true);
+                monitor.worked(logEntries.size());
+                while (!monitor.isCanceled() && fromRevision > 1 && logEntries.size() < showCommitCount) {
+                    long probableRevision = fromRevision - Math.min(showCommitCount - logEntries.size(), COMMIT_LOAD_PACK);
                     Collection<SVNLogEntry> moreLogEntries =
                             repository.log(new String[] {""}, null, probableRevision, fromRevision - 1, true, true);
+                    monitor.worked(moreLogEntries.size());
                     logEntries.addAll(moreLogEntries);
                     fromRevision = probableRevision;
                 }
-                SVNLogEntry[] logEntryArray = logEntries.toArray(new SVNLogEntry[] {});
-                commitViewer.setInput(logEntryArray);
-            } else {
-                commitViewer.setInput(new SVNLogEntry[] {});
+                logEntryArray.addAll(logEntries);
+                Collections.reverse(logEntryArray);
+            }
+            if (!monitor.isCanceled()) {
+                Display.getDefault().syncExec(new Runnable() {
+                    @Override
+                    public void run() {
+                        currentProject = project;
+                        commitViewer.setInput(logEntryArray);
+                    }
+                });
             }
         } finally {
+            monitor.done();
             repository.closeSession();
         }
+    }
+
+    protected void sendMessage(final SVNLogEntry logEntry, final SVNLogEntryPath path) {
+        Map<String, Object> props = new HashMap<String, Object>();
+        props.put(LOG_ENTRY_KEY, logEntry);
+        props.put(LOG_ENTRY_PATH_KEY, path);
+
+        Event event = new Event(VISUALIZATOR_TOPIC, props);
+        messageService.postEvent(event);
     }
 
     protected class MenuCheckAction extends Action {
@@ -390,7 +513,7 @@ public class HistoryView extends ViewPart {
     protected class CommitCountValidator implements ModifyListener {
         private boolean wasValid = true;
 
-        public void validate() {
+        public boolean validate() {
             try {
                 if (Integer.parseInt(showCommitCountInput.getText()) <= 0) {
                     throw new NumberFormatException();
@@ -400,12 +523,14 @@ public class HistoryView extends ViewPart {
                     decreaseErrorCount();
                     showCommitCountInput.setBackground(null);
                 }
+                return true;
             } catch (NumberFormatException ee) {
                 if (wasValid) {
                     wasValid = false;
                     increaseErrorCount();
                     showCommitCountInput.setBackground(errorColor);
                 }
+                return false;
             }
         }
 
@@ -415,27 +540,123 @@ public class HistoryView extends ViewPart {
         }
     }
 
-    protected class GoButtonClickHandler extends SelectionAdapter {
+    protected class FilterButtonClickHandler extends SelectionAdapter {
         @Override
         public void widgetSelected(SelectionEvent e) {
-            MessageBox mb = new MessageBox(getSite().getShell(), SWT.OK);
-            mb.setMessage(searchText + "; messages: " + messagesIncluded + ", paths: " + pathsIncluded + ", regex: "
-                    + regexEnabled);
-            mb.open();
+            super.widgetSelected(e);
+            commitViewer.refresh();
         }
     }
 
-    protected class SelectionHandler implements ISelectionListener {
+    protected class UpdateButtonClickHandler extends SelectionAdapter {
+        @Override
+        public void widgetSelected(SelectionEvent e) {
+            super.widgetSelected(e);
+            performLoadCommits(currentProject);
+        }
+    }
+
+    protected class ProjectSelectionHandler implements ISelectionListener {
         @Override
         public void selectionChanged(IWorkbenchPart part, ISelection selection) {
             if (selection instanceof IStructuredSelection) {
                 IStructuredSelection structuredSelection = (IStructuredSelection) selection;
                 if (structuredSelection.getFirstElement() instanceof CustomProject
-                        && currentProject !=null && structuredSelection.getFirstElement() != currentProject) {
-                    currentProject = (CustomProject) structuredSelection.getFirstElement();
-                    performUpdateCommits();
+                        && (currentProject !=null && structuredSelection.getFirstElement() != currentProject
+                            || currentProject == null)) {
+                    boolean loaded = performLoadCommits((CustomProject) structuredSelection.getFirstElement());
+                    showCommitCountInput.setEnabled(loaded);
+                    searchTextInput.setEnabled(loaded);
+                    filterCommitListButton.setEnabled(loaded);
+                    updateCommitListButton.setEnabled(loaded);
                 }
             }
+        }
+    }
+
+    protected class CommitSelectionHandler implements ISelectionChangedListener {
+        private void updateDetailedMessage(final SVNLogEntry logEntry) {
+            String message = logEntry == null ? "" : logEntry.getMessage();
+            commitDetailedMessageInput.setText(message);
+        }
+
+        private void updateChangedPaths(final SVNLogEntry logEntry) {
+            changedPathsViewer.setInput(logEntry == null ? null : logEntry.getChangedPaths().values());
+        }
+
+        @Override
+        public void selectionChanged(final SelectionChangedEvent event) {
+            IStructuredSelection s = (IStructuredSelection) event.getSelection();
+            SVNLogEntry logEntry = (SVNLogEntry) s.getFirstElement();
+            updateDetailedMessage(logEntry);
+            updateChangedPaths(logEntry);
+        }
+        
+    }
+
+    protected class CommitTableFilter extends ViewerFilter {
+        private abstract class Matcher {
+            public abstract boolean match(String text);
+        }
+
+        private class SimpleMatcher extends Matcher {
+            public String pattern;
+
+            public SimpleMatcher(final String matchPattern) {
+                pattern = matchPattern;
+            }
+
+            @Override
+            public boolean match(String text) {
+                return text.contains(pattern);
+            }
+        }
+
+        private class RegexMatcher extends Matcher {
+            public Pattern pattern;
+
+            public RegexMatcher(final Pattern matchPattern) {
+                pattern = matchPattern;
+            }
+
+            @Override
+            public boolean match(String text) {
+                return pattern.matcher(text).find();
+            }
+        }
+
+        @Override
+        public boolean select(Viewer viewer, Object parentElement, Object element) {
+            if (!isValid()) {
+                return true;
+            }
+            SVNLogEntry logEntry = (SVNLogEntry) element;
+            String filterText = searchText.trim();
+            if (filterText.length() > 0) {
+                boolean matched = false;
+                Matcher matcher = regexEnabled ? new RegexMatcher(Pattern.compile(filterText)) : new SimpleMatcher(filterText);
+                if (!messagesIncluded || !(matched = matcher.match(logEntry.getMessage()))) {
+                    if (pathsIncluded) {
+                        for (String path : logEntry.getChangedPaths().keySet()) {
+                            if (matched = matcher.match(path)) {
+                                break;
+                            }
+                        }
+                    }
+                }
+                return matched;
+            }
+
+            return true;
+        }
+    }
+
+    protected class CommitTableSorter extends ViewerComparator {
+        @Override
+        public int compare(Viewer viewer, Object e1, Object e2) {
+            SVNLogEntry entry1 = (SVNLogEntry) e1;
+            SVNLogEntry entry2 = (SVNLogEntry) e2;
+            return (int) (entry2.getRevision() - entry1.getRevision());
         }
     }
 

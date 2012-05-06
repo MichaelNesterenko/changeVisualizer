@@ -40,7 +40,7 @@ public abstract class BasePropertyPage extends PropertyPage {
         }
 
         {
-            repositoryLocation.setEnabled(false);
+            repositoryLocation.setEditable(false);
         }
 
         return tlc;

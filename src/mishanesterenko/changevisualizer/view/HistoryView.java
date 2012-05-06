@@ -608,7 +608,7 @@ public class HistoryView extends ViewPart {
 
             @Override
             public boolean match(String text) {
-                return text.contains(pattern);
+                return text.toLowerCase().contains(pattern.toLowerCase());
             }
         }
 
@@ -634,7 +634,8 @@ public class HistoryView extends ViewPart {
             String filterText = searchText.trim();
             if (filterText.length() > 0) {
                 boolean matched = false;
-                Matcher matcher = regexEnabled ? new RegexMatcher(Pattern.compile(filterText)) : new SimpleMatcher(filterText);
+                Matcher matcher = regexEnabled ? new RegexMatcher(Pattern.compile(filterText, Pattern.CASE_INSENSITIVE))
+                    : new SimpleMatcher(filterText);
                 if (!messagesIncluded || !(matched = matcher.match(logEntry.getMessage()))) {
                     if (pathsIncluded) {
                         for (String path : logEntry.getChangedPaths().keySet()) {

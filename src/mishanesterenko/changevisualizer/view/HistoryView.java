@@ -1,72 +1,77 @@
 package mishanesterenko.changevisualizer.view;
 
-import java.util.Calendar;
-import java.util.Date;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import mishanesterenko.changevisualizer.activator.ChangeVisualizerPlugin;
+import mishanesterenko.changevisualizer.projectmodel.CustomProject;
 
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.MenuManager;
 import org.eclipse.jface.action.Separator;
 import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.jface.viewers.ArrayContentProvider;
+import org.eclipse.jface.viewers.ColumnLabelProvider;
+import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredContentProvider;
+import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.ITableLabelProvider;
 import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.jface.viewers.TableViewer;
+import org.eclipse.jface.viewers.TableViewerColumn;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
-import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.DateTime;
 import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.MessageBox;
+import org.eclipse.swt.widgets.TableColumn;
+import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
+import org.eclipse.ui.ISelectionListener;
 import org.eclipse.ui.ISharedImages;
+import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.PlatformUI;
-import org.eclipse.ui.internal.actions.ModifyWorkingSetDelegate;
 import org.eclipse.ui.part.ViewPart;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
-import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.layout.GridData;
+import org.tmatesoft.svn.core.SVNException;
+import org.tmatesoft.svn.core.SVNLogEntry;
+import org.tmatesoft.svn.core.SVNURL;
+import org.tmatesoft.svn.core.auth.ISVNAuthenticationManager;
+import org.tmatesoft.svn.core.io.SVNRepository;
+import org.tmatesoft.svn.core.io.SVNRepositoryFactory;
+import org.tmatesoft.svn.core.wc.SVNWCUtil;
 
 public class HistoryView extends ViewPart {
-    /**
-     * 
-     */
-    private static final int DAYS_IN_PAST = -10;
-
     public static final String ID = "changeVisualizer.view.history";
 
     private Color errorColor;
 
-    private TableViewer viewer;
+    private TableViewer commitViewer;
 
     private Image searchTypeImage;
-
-    private DateTime dateFromInput;
-
-    private DateTime dateToInput;
 
     private boolean messagesIncluded = true;
     private boolean pathsIncluded = true;
     private boolean regexEnabled = true;
 
-    private Date dateFrom;
-    private Date dateTo;
+    private int showCommitCount = 100;
 
     private String searchText;
 
@@ -78,51 +83,15 @@ public class HistoryView extends ViewPart {
 
     private SearchTextInputValidator searchTextValidator;
 
+    private ISelectionListener selectionHandler;
+
+    private CustomProject currentProject;
+
+    private Text showCommitCountInput;
+
     public HistoryView() {
         ImageDescriptor id = AbstractUIPlugin.imageDescriptorFromPlugin(ChangeVisualizerPlugin.PLUGIN_ID, "icons/searchtype.png");
         searchTypeImage = id.createImage();
-    }
-
-    /**
-     * The content provider class is responsible for providing objects to the
-     * view. It can wrap existing objects in adapters or simply return objects
-     * as-is. These objects may be sensitive to the current input of the view,
-     * or ignore it and always show the same content (like Task List, for
-     * example).
-     */
-    class ViewContentProvider implements IStructuredContentProvider {
-        @Override
-        public void inputChanged(Viewer v, Object oldInput, Object newInput) {
-        }
-
-        @Override
-        public void dispose() {
-        }
-
-        @Override
-        public Object[] getElements(Object parent) {
-            if (parent instanceof Object[]) {
-                return (Object[]) parent;
-            }
-            return new Object[0];
-        }
-    }
-
-    class ViewLabelProvider extends LabelProvider implements ITableLabelProvider {
-        @Override
-        public String getColumnText(Object obj, int index) {
-            return getText(obj);
-        }
-
-        @Override
-        public Image getColumnImage(Object obj, int index) {
-            return getImage(obj);
-        }
-
-        @Override
-        public Image getImage(Object obj) {
-            return PlatformUI.getWorkbench().getSharedImages().getImage(ISharedImages.IMG_OBJ_ELEMENT);
-        }
     }
 
     @Override
@@ -139,6 +108,8 @@ public class HistoryView extends ViewPart {
         createTopPanel(parent);
         createHistoryTable(parent);
         createBottomPanel(parent);
+
+        getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(selectionHandler = new SelectionHandler());
     }
 
     private MenuManager createSearchTypeMenu() {
@@ -163,7 +134,7 @@ public class HistoryView extends ViewPart {
             public void run() {
                 super.run();
                 regexEnabled = isChecked();
-                searchTextValidator.validateSearchText();
+                searchTextValidator.validate();
             }
         });
         return mm;
@@ -195,86 +166,122 @@ public class HistoryView extends ViewPart {
 
         { // go button
             goButton = new Button(panel, SWT.PUSH);
-            goButton.addSelectionListener(new SelectionAdapter() {
-                @Override
-                public void widgetSelected(SelectionEvent e) {
-                    MessageBox mb = new MessageBox(getSite().getShell(), SWT.OK);
-                    mb.setMessage(searchText + "; messages: " + messagesIncluded + ", paths: " + pathsIncluded + ", regex: "
-                            + regexEnabled + "\n from: " + dateFrom + ", to: " + dateTo);
-                    mb.open();
-                }
-            });
+            goButton.addSelectionListener(new GoButtonClickHandler());
             goButton.setText("Go");
             goButton.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, false, false));
         }
     }
 
     protected void createHistoryTable(final Composite parent) {
-        viewer = new TableViewer(parent, SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL);
-        Table table = viewer.getTable();
+        commitViewer = new TableViewer(parent, SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL | SWT.FULL_SELECTION);
+        Table table = commitViewer.getTable();
         table.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-        viewer.setContentProvider(new ViewContentProvider());
-        viewer.setLabelProvider(new ViewLabelProvider());
-        // Provide the input to the ContentProvider
-        viewer.setInput(new String[] {"One", "Two", "Three"});
+        table.setHeaderVisible(true);
+        table.setLinesVisible(true);
+
+//        Listener paintListener = new Listener() {
+//            @Override
+//            public void handleEvent(Event event) {
+//                switch (event.type) {
+//                case SWT.MeasureItem: {
+//                    TableItem item = (TableItem) event.item;
+//                    String text = item.getText(event.index).replace("\n", "\n|");//getText(item, event.index);
+//                    Point size = event.gc.textExtent(text);
+//                    event.width = size.x;
+//                    event.height = Math.max(event.height, size.y);
+//                    break;
+//                }
+//                case SWT.PaintItem: {
+//                    TableItem item = (TableItem) event.item;
+//                    String text = item.getText(event.index).replace("\n", "\n|");//getText(item, event.index);
+//                    Point size = event.gc.textExtent(text);
+//                    int offset2 = event.index == 0 ? Math.max(0, (event.height - size.y) / 2) : 0;
+//                    event.gc.drawText(text, event.x, event.y + offset2, true);
+//                    break;
+//                }
+//                case SWT.EraseItem: {
+//                    event.detail &= ~SWT.FOREGROUND;
+//                    break;
+//                }
+//                }
+//            }
+//        };
+//
+//        table.addListener(SWT.MeasureItem, paintListener);
+//        table.addListener(SWT.PaintItem, paintListener);
+//        table.addListener(SWT.EraseItem, paintListener);
+
+        commitViewer.setContentProvider(ArrayContentProvider.getInstance());
+
+        TableViewerColumn column = createTableViewerColumn("Revision", 100, 0);
+        column.setLabelProvider(new ColumnLabelProvider() {
+            @Override
+            public String getText(Object element) {
+                SVNLogEntry logEntry = (SVNLogEntry) element;
+                return Long.toString(logEntry.getRevision());
+            }
+        });
+
+        column = createTableViewerColumn("Author", 100, 1);
+        column.setLabelProvider(new ColumnLabelProvider() {
+            @Override
+            public String getText(Object element) {
+                SVNLogEntry logEntry = (SVNLogEntry) element;
+                return logEntry.getAuthor();
+            }
+        });
+
+        column = createTableViewerColumn("Message", 500, 2);
+        column.setLabelProvider(new ColumnLabelProvider() {
+            @Override
+            public String getText(Object element) {
+                SVNLogEntry logEntry = (SVNLogEntry) element;
+                return logEntry.getMessage().replace("\n", " ");
+            }
+        });
+    }
+
+    protected TableViewerColumn createTableViewerColumn(final String title, final int bound, final int colNumber) {
+        final TableViewerColumn viewerColumn = new TableViewerColumn(commitViewer, SWT.NONE);
+        final TableColumn column = viewerColumn.getColumn();
+        column.setText(title);
+        column.setWidth(bound);
+        column.setResizable(true);
+        column.setMoveable(true);
+        return viewerColumn;
     }
 
     protected void createBottomPanel(final Composite parent) {
         Composite panel = new Composite(parent, SWT.NONE);
-        panel.setLayout(new GridLayout(5, false));
+        panel.setLayout(new GridLayout(2, false));
         panel.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 
         {
             Label l = new Label(panel, SWT.NONE);
-            l.setText("From:");
+            l.setText("Show commit count:");
             l.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, false, false));
 
-            Composite controlParent = new Composite(panel, SWT.NONE);
-            FillLayout fillLayout = new FillLayout();
-            fillLayout.marginHeight = 5;
-            fillLayout.marginWidth = 5;
-            controlParent.setLayout(fillLayout);
-            controlParent.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, false, false));
-            dateFromInput = new DateTime(controlParent, SWT.BORDER | SWT.DATE | SWT.DROP_DOWN);
-
-            Calendar c = Calendar.getInstance();
-            c.add(Calendar.DAY_OF_MONTH, DAYS_IN_PAST);
-            dateFromInput.setDate(c.get(Calendar.YEAR), c.get(Calendar.MONTH), c.get(Calendar.DAY_OF_MONTH));
-        }
-
-        {
-            Label l = new Label(panel, SWT.NONE);
-            l.setText("To:");
-            l.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, false, false));
-
-            Composite parentControl = new Composite(panel, SWT.NONE);
-            FillLayout fillLayout = new FillLayout();
-            fillLayout.marginHeight = 5;
-            fillLayout.marginWidth = 5;
-            parentControl.setLayout(fillLayout);
-            parentControl.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, false, false));
-            dateToInput = new DateTime(parentControl, SWT.BORDER | SWT.DATE | SWT.DROP_DOWN);
-        }
-
-        {
-            DateInputListener dateListener = new DateInputListener(dateFromInput, dateToInput);
-            new Label(panel, SWT.NONE);
-            dateFromInput.addSelectionListener(dateListener);
-            dateToInput.addSelectionListener(dateListener);
+            showCommitCountInput = new Text(panel, SWT.BORDER | SWT.SINGLE | SWT.RIGHT);
+            GridData gd_showCommitCountInput = new GridData(SWT.LEFT, SWT.CENTER, true, false);
+            gd_showCommitCountInput.minimumWidth = 50;
+            showCommitCountInput.setLayoutData(gd_showCommitCountInput);
+            showCommitCountInput.setText(Integer.toString(showCommitCount));
+            showCommitCountInput.addModifyListener(new CommitCountValidator());
         }
     }
 
     /**
-     * Passing the focus request to the viewer's control.
+     * Passing the focus request to the commitViewer's control.
      */
     @Override
     public void setFocus() {
-        viewer.getControl().setFocus();
+        commitViewer.getControl().setFocus();
     }
 
     @Override
     public void dispose() {
         searchTypeImage.dispose();
+        getSite().getWorkbenchWindow().getSelectionService().removeSelectionListener(selectionHandler);
         super.dispose();
     }
 
@@ -297,6 +304,50 @@ public class HistoryView extends ViewPart {
         updateValidStatus();
     }
 
+    protected void performUpdateCommits() {
+        try {
+            updateCommits();
+        } catch (SVNException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    protected void updateCommits() throws SVNException {
+        SVNRepository repository = SVNRepositoryFactory.create(SVNURL.parseURIDecoded(currentProject.getRepositoryLocation()));
+        try {
+            ISVNAuthenticationManager authManager = SVNWCUtil.createDefaultAuthenticationManager(currentProject.getUsername(),
+                    currentProject.getUserPassword());
+            repository.setAuthenticationManager(authManager);
+
+            Collection<SVNLogEntry> logEntries = repository.log(new String[] {""}, null, -1, -1, false, true);
+            Iterator<SVNLogEntry> it = logEntries.iterator();
+            SVNLogEntry logEntry = null;
+            while (it.hasNext()) {
+                logEntry = it.next();
+                break;
+            }
+            if (logEntry != null) { 
+                long fromRevision = logEntry.getRevision() - showCommitCount;
+                logEntries = repository.log(new String[] {""}, null, fromRevision, -1, true, true);
+                while (fromRevision > 1 && logEntries.size() < showCommitCount) {
+                    long probableRevision = fromRevision - (showCommitCount - logEntries.size());
+                    Collection<SVNLogEntry> moreLogEntries =
+                            repository.log(new String[] {""}, null, probableRevision, fromRevision - 1, true, true);
+                    logEntries.addAll(moreLogEntries);
+                    fromRevision = probableRevision;
+                }
+                SVNLogEntry[] logEntryArray = logEntries.toArray(new SVNLogEntry[] {});
+                commitViewer.setInput(logEntryArray);
+            } else {
+                commitViewer.setInput(new SVNLogEntry[] {});
+            }
+        } finally {
+            repository.closeSession();
+        }
+    }
+
     protected class MenuCheckAction extends Action {
         public MenuCheckAction(final String text, final boolean checked) {
             super(text, IAction.AS_CHECK_BOX);
@@ -307,7 +358,7 @@ public class HistoryView extends ViewPart {
     protected class SearchTextInputValidator implements ModifyListener {
         private boolean wasValid = true;
 
-        public void validateSearchText() {
+        public void validate() {
             if (regexEnabled) {
                 try {
                     Pattern.compile(searchTextInput.getText());
@@ -332,61 +383,60 @@ public class HistoryView extends ViewPart {
 
         @Override
         public void modifyText(ModifyEvent e) {
-            validateSearchText();
+            validate();
         }
     }
 
-    protected class DateInputListener extends SelectionAdapter {
+    protected class CommitCountValidator implements ModifyListener {
         private boolean wasValid = true;
 
-        private DateTime fromInput;
-
-        private DateTime toInput;
-
-        public DateInputListener(final DateTime from, final DateTime to) {
-            fromInput = from;
-            toInput = to;
-        }
-
         public void validate() {
-            Date companionDate = getDateFromDateTimeControl(fromInput);
-            Date myDate = getDateFromDateTimeControl(toInput);
-            if (myDate.compareTo(companionDate) < 0) {
+            try {
+                if (Integer.parseInt(showCommitCountInput.getText()) <= 0) {
+                    throw new NumberFormatException();
+                }
+                if(!wasValid) {
+                    wasValid = true;
+                    decreaseErrorCount();
+                    showCommitCountInput.setBackground(null);
+                }
+            } catch (NumberFormatException ee) {
                 if (wasValid) {
                     wasValid = false;
-                    fromInput.getParent().setBackground(errorColor);
-                    toInput.getParent().setBackground(errorColor);
                     increaseErrorCount();
+                    showCommitCountInput.setBackground(errorColor);
                 }
-            } else if (!wasValid) {
-                wasValid = true;
-                fromInput.getParent().setBackground(null);
-                toInput.getParent().setBackground(null);
-                decreaseErrorCount();
             }
         }
 
         @Override
-        public void widgetSelected(SelectionEvent e) {
-            super.widgetSelected(e);
+        public void modifyText(ModifyEvent e) {
             validate();
-            if (dateFromInput == e.getSource()) {
-                dateFrom = getDateFromDateTimeControl(dateFromInput);
-            } else if (dateToInput == e.getSource()) {
-                dateTo = getDateFromDateTimeControl(dateToInput);
-            } else {
-                throw new IllegalStateException("Wrong date input contro");
+        }
+    }
+
+    protected class GoButtonClickHandler extends SelectionAdapter {
+        @Override
+        public void widgetSelected(SelectionEvent e) {
+            MessageBox mb = new MessageBox(getSite().getShell(), SWT.OK);
+            mb.setMessage(searchText + "; messages: " + messagesIncluded + ", paths: " + pathsIncluded + ", regex: "
+                    + regexEnabled);
+            mb.open();
+        }
+    }
+
+    protected class SelectionHandler implements ISelectionListener {
+        @Override
+        public void selectionChanged(IWorkbenchPart part, ISelection selection) {
+            if (selection instanceof IStructuredSelection) {
+                IStructuredSelection structuredSelection = (IStructuredSelection) selection;
+                if (structuredSelection.getFirstElement() instanceof CustomProject
+                        && currentProject !=null && structuredSelection.getFirstElement() != currentProject) {
+                    currentProject = (CustomProject) structuredSelection.getFirstElement();
+                    performUpdateCommits();
+                }
             }
         }
     }
 
-    //protected class GoButtonClickHandler extends
-
-    public static Date getDateFromDateTimeControl(final DateTime control) {
-        Calendar c = Calendar.getInstance();
-        c.set(Calendar.YEAR, control.getYear());
-        c.set(Calendar.MONTH, control.getMonth());
-        c.set(Calendar.DAY_OF_MONTH, control.getDay());
-        return c.getTime();
-    }
 }

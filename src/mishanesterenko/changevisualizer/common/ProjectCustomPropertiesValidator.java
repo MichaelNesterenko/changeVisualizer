@@ -5,6 +5,6 @@ import java.io.File;
 public class ProjectCustomPropertiesValidator {
 
     public boolean validate(final String repositoryLocation) {
-        return new File(repositoryLocation).isDirectory();
+        return true;//new File(repositoryLocation).isDirectory();
     }
 }

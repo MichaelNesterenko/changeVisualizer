@@ -37,7 +37,6 @@ import org.eclipse.jface.viewers.TableViewerColumn;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.jface.viewers.ViewerComparator;
 import org.eclipse.jface.viewers.ViewerFilter;
-import org.eclipse.jface.viewers.ViewerSorter;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.events.ModifyEvent;
@@ -421,7 +420,7 @@ public class HistoryView extends ViewPart {
                     project.getUserPassword());
             repository.setAuthenticationManager(authManager);
 
-            Collection<SVNLogEntry> logEntries = repository.log(new String[] {""}, null, -1, -1, false, true);
+            Collection<SVNLogEntry> logEntries = repository.log(new String[] {""}, null, -1, -1, true, true);
             Iterator<SVNLogEntry> it = logEntries.iterator();
             SVNLogEntry logEntry = null;
             while (it.hasNext()) {
@@ -433,8 +432,7 @@ public class HistoryView extends ViewPart {
             }
             final List<SVNLogEntry> logEntryArray = new ArrayList<SVNLogEntry>();
             if (logEntry != null) { 
-                long fromRevision = logEntry.getRevision();// - (showCommitCount - 1);
-                //logEntries = repository.log(new String[] {""}, null, fromRevision, -1, true, true);
+                long fromRevision = logEntry.getRevision();
                 monitor.worked(logEntries.size());
                 while (!monitor.isCanceled() && fromRevision > 1 && logEntries.size() < showCommitCount) {
                     long probableRevision = fromRevision - Math.min(showCommitCount - logEntries.size(), COMMIT_LOAD_PACK);

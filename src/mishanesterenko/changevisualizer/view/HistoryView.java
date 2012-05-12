@@ -12,11 +12,10 @@ import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import mishanesterenko.changevisualizer.activator.ChangeVisualizerPlugin;
+import mishanesterenko.changevisualizer.common.Util;
 import mishanesterenko.changevisualizer.projectmodel.CustomProject;
 import org.eclipse.core.runtime.IProgressMonitor;
-import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.NullProgressMonitor;
-import org.eclipse.core.runtime.Status;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.MenuManager;
@@ -26,6 +25,8 @@ import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
+import org.eclipse.jface.viewers.DoubleClickEvent;
+import org.eclipse.jface.viewers.IDoubleClickListener;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.ISelectionChangedListener;
 import org.eclipse.jface.viewers.IStructuredSelection;
@@ -55,9 +56,6 @@ import org.eclipse.ui.ISelectionListener;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.part.ViewPart;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
-import org.eclipse.ui.statushandlers.IStatusAdapterConstants;
-import org.eclipse.ui.statushandlers.StatusAdapter;
-import org.eclipse.ui.statushandlers.StatusManager;
 import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Table;
@@ -268,6 +266,7 @@ public class HistoryView extends ViewPart {
     protected void createChangedPathsList(final Composite parent) {
         changedPathsViewer = new ListViewer(parent, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL);
         changedPathsViewer.setContentProvider(ArrayContentProvider.getInstance());
+        changedPathsViewer.addDoubleClickListener(new ChangedPathDblClickHandler());
         changedPathsViewer.setLabelProvider(new LabelProvider() {
             @Override
             public String getText(Object element) {
@@ -399,11 +398,7 @@ public class HistoryView extends ViewPart {
         } catch (Exception e) {
             Throwable cause = e.getCause();
             cause = cause == null ? e : cause;
-            IStatus status = new Status(IStatus.ERROR, ChangeVisualizerPlugin.PLUGIN_ID, cause.getMessage(), cause);
-
-            StatusAdapter statusAdapter = new StatusAdapter(status);
-            statusAdapter.setProperty(IStatusAdapterConstants.TITLE_PROPERTY, "Error");
-            StatusManager.getManager().handle(statusAdapter, StatusManager.BLOCK);
+            Util.showError(cause, null);
             return false;
         }
     }
@@ -590,6 +585,19 @@ public class HistoryView extends ViewPart {
             updateChangedPaths(logEntry);
         }
         
+    }
+
+    protected class ChangedPathDblClickHandler implements IDoubleClickListener {
+        @Override
+        public void doubleClick(DoubleClickEvent event) {
+            IStructuredSelection commitSelection = (IStructuredSelection) commitViewer.getSelection();
+            IStructuredSelection changedPathSelection = (IStructuredSelection) event.getSelection();
+
+            SVNLogEntry logEntry = (SVNLogEntry) commitSelection.getFirstElement();
+            SVNLogEntryPath changedPath = (SVNLogEntryPath) changedPathSelection.getFirstElement();
+
+            sendMessage(logEntry, changedPath);
+        }
     }
 
     protected class CommitTableFilter extends ViewerFilter {

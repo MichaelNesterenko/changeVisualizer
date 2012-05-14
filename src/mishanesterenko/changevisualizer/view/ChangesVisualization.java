@@ -1,16 +1,31 @@
 package mishanesterenko.changevisualizer.view;
 
+import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Hashtable;
+import java.util.List;
+import java.util.Map;
 
+import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.SubMonitor;
 import org.eclipse.draw2d.SWTEventDispatcher;
+import org.eclipse.jdt.core.JavaCore;
+import org.eclipse.jdt.core.dom.AST;
+import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.ASTParser;
 import org.eclipse.jface.action.IToolBarManager;
+import org.eclipse.jface.dialogs.ProgressMonitorDialog;
+import org.eclipse.jface.operation.IRunnableWithProgress;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.events.MouseMoveListener;
 import org.eclipse.swt.events.SelectionAdapter;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.ScrollBar;
 import org.eclipse.ui.part.ViewPart;
 import org.eclipse.zest.core.viewers.AbstractZoomableViewer;
@@ -24,11 +39,18 @@ import org.osgi.framework.BundleContext;
 import org.osgi.service.event.Event;
 import org.osgi.service.event.EventConstants;
 import org.osgi.service.event.EventHandler;
+import org.tmatesoft.svn.core.SVNException;
+import org.tmatesoft.svn.core.SVNLogEntry;
+import org.tmatesoft.svn.core.SVNLogEntryPath;
 import mishanesterenko.changevisualizer.activator.ChangeVisualizerPlugin;
-import mishanesterenko.misc.GraphContentProvider;
-import mishanesterenko.misc.GraphLabelProvider;
-import mishanesterenko.misc.ModelProvider;
+import mishanesterenko.changevisualizer.common.Util;
 import org.eclipse.zest.core.widgets.Graph;
+import mishanesterenko.changevisualizer.vcsadapter.SvnAdapter;
+import mishanesterenko.changevisualizer.matchingalgorithm.converter.ConvertingVisitor;
+import mishanesterenko.changevisualizer.matchingalgorithm.domain.Node;
+import mishanesterenko.changevisualizer.projectmodel.CustomProject;
+import mishanesterenko.changevisualizer.content.provider.GraphContentProvider;
+import mishanesterenko.changevisualizer.content.provider.GraphLabelProvider;
 
 @SuppressWarnings("restriction")
 public class ChangesVisualization extends ViewPart implements IZoomableWorkbenchPart {
@@ -44,10 +66,11 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
         Hashtable<String, Object> props = new Hashtable<String, Object>();
         props.put(EventConstants.EVENT_TOPIC, HistoryView.VISUALIZATOR_TOPIC);
         BundleContext ctx = ChangeVisualizerPlugin.getPlugin().getBundle().getBundleContext();
-        ctx.registerService(new String[] { EventHandler.class.getName() }, new EventReceiver(), props);
+        ctx.registerService(new String[] { EventHandler.class.getName() }, new MessageHandler(), props);
 
-        leftViewer = createGraphViewer(parent);
-        rightViewer = createGraphViewer(parent);
+        SashForm sf = new SashForm(parent, SWT.HORIZONTAL);
+        leftViewer = createGraphViewer(sf);
+        rightViewer = createGraphViewer(sf);
 
         leftViewer.getZoomManager().addZoomListener(new ZoomChangedHandler());
 
@@ -60,7 +83,7 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
         graphViewer.setNodeStyle(ZestStyles.NODES_NO_LAYOUT_RESIZE);
         graphViewer.getGraphControl().getVerticalBar().addSelectionListener(new GraphScrollHandler());
         graphViewer.getGraphControl().getHorizontalBar().addSelectionListener(new GraphScrollHandler());
-        graphViewer.getGraphControl().setPreferredSize(10000, 1500);
+        graphViewer.getGraphControl().setPreferredSize(50000, 1500);
         {
             GraphMouseHandler mouseHandler = new GraphMouseHandler();
             graphViewer.getGraphControl().addMouseMoveListener(mouseHandler);
@@ -68,7 +91,6 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
         }
         graphViewer.setContentProvider(new GraphContentProvider());
         graphViewer.setLabelProvider(new GraphLabelProvider());
-        graphViewer.setInput(ModelProvider.getModel());
         return graphViewer;
     }
 
@@ -82,10 +104,113 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
         return leftViewer;
     }
 
-    protected class EventReceiver implements EventHandler {
+    protected ASTNode buildAst(final String contents, final IProgressMonitor monitor) {
+        ASTParser parser = ASTParser.newParser(AST.JLS4);
+        Map<String, Object> options = JavaCore.getOptions();
+        options.put(JavaCore.COMPILER_SOURCE, JavaCore.VERSION_1_6);
+        parser.setCompilerOptions(options);
+        parser.setKind(ASTParser.K_COMPILATION_UNIT);
+        parser.setSource(contents.toCharArray());
+
+        return parser.createAST(monitor);
+    }
+
+    protected Node convertAst(final ASTNode node, final IProgressMonitor monitor) {
+        ConvertingVisitor converter = new ConvertingVisitor(monitor);
+        node.accept(converter);
+        return converter.getNode();
+    }
+
+    protected List<Node> getNodeList(final Node n) {
+        List<Node> nodes = new ArrayList<Node>();
+        nodes.add(n);
+        for (Node child : n.getChildren()) {
+            nodes.addAll(getNodeList(child));
+        }
+        return nodes;
+    }
+
+    protected class MessageHandler implements EventHandler {
         @Override
         public void handleEvent(final Event event) {
-            System.out.println(event);
+            final SVNLogEntry logEntry = (SVNLogEntry) event.getProperty(HistoryView.LOG_ENTRY_KEY);
+            final SVNLogEntryPath changedPath = (SVNLogEntryPath) event.getProperty(HistoryView.LOG_ENTRY_PATH_KEY);
+            final CustomProject project = (CustomProject) event.getProperty(HistoryView.PROJECT_KEY);
+
+            if (changedPath.getType() != SVNLogEntryPath.TYPE_MODIFIED
+                    //|| changedPath.getKind() != SVNNodeKind.FILE
+                    || !changedPath.getPath().endsWith("java")) {
+                Display.getDefault().syncExec(new Runnable() {
+                    @Override
+                    public void run() {
+                        MessageBox mb = new MessageBox(getSite().getShell(), SWT.ICON_ERROR | SWT.OK);
+                        mb.setText("Error");
+                        mb.setMessage("Wrong type of file. Only modified java source code files are supported.");
+                        mb.open();
+                    }
+                });
+            } else {
+                Display.getDefault().syncExec(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            ProgressMonitorDialog progressDialog = new ProgressMonitorDialog(getSite().getShell());
+                            progressDialog.run(false, true, new IRunnableWithProgress() {
+                                @Override
+                                public void run(final IProgressMonitor monitor)
+                                        throws InvocationTargetException, InterruptedException {
+                                    try {
+                                        SubMonitor subMonitor = SubMonitor.convert(monitor, "Building tree from source code", 6);
+
+                                        long previousRevision = logEntry.getRevision() - 1;
+                                        long currentRevision = logEntry.getRevision();
+
+                                        SvnAdapter adapter = new SvnAdapter(project);
+                                        String previousContents = adapter.loadTextFile(changedPath.getPath(), previousRevision);
+                                        subMonitor.worked(1);
+                                        if (subMonitor.isCanceled()) {
+                                            return;
+                                        }
+                                        String currentContents = adapter.loadTextFile(changedPath.getPath(), currentRevision);
+                                        subMonitor.worked(1);
+                                        if (subMonitor.isCanceled()) {
+                                            return;
+                                        }
+
+                                        ASTNode astNodePrev = buildAst(previousContents, subMonitor.newChild(1));
+                                        subMonitor.worked(1);
+                                        if (subMonitor.isCanceled()) {
+                                            return;
+                                        }
+                                        subMonitor.subTask("Building ast for " + currentRevision + " revision");
+                                        ASTNode astNodeCurrent = buildAst(currentContents, subMonitor.newChild(1));
+                                        if (subMonitor.isCanceled()) {
+                                            return;
+                                        }
+
+                                        Node previousNode = convertAst(astNodePrev, subMonitor.newChild(1));
+                                        if (subMonitor.isCanceled()) {
+                                            return;
+                                        }
+                                        Node currentNode = convertAst(astNodeCurrent, subMonitor.newChild(1));
+                                        if (subMonitor.isCanceled()) {
+                                            return;
+                                        }
+                                        leftViewer.setInput(getNodeList(previousNode));
+                                        rightViewer.setInput(getNodeList(currentNode));
+                                    } catch (SVNException e) {
+                                        throw new InvocationTargetException(e);
+                                    } finally {
+                                        monitor.done();
+                                    }
+                                }
+                            });
+                        } catch (Exception e) {
+                            Util.showError(e);
+                        }
+                    }
+                });
+            }
         }
     }
 

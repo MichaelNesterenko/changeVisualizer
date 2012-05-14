@@ -113,28 +113,27 @@ public class ConvertingVisitor extends ASTVisitor {
     }
 
     @Override
-    public void preVisit(ASTNode node) {
-        super.preVisit(node);
-        astNodeStack.push(node); 
+    public void preVisit(ASTNode astNode) {
+        super.preVisit(astNode);
+        astNodeStack.push(astNode); 
         Node parent = nodeStack.peek();
-        Node newNode = new Node();
-
-        parent.getChildren().add(newNode);
-        nodeStack.push(newNode);
+        currentNode = new Node();
+        currentNode.setParent(parent);
+        currentNode.setAstNode(astNode);
+        currentNode.setLabel(astNode.getClass().getSimpleName());
+        currentNode.setValue(astNode.toString());
+        parent.getChildren().add(currentNode);
+        nodeStack.push(currentNode);
     }
 
     @Override
     public void postVisit(ASTNode astNode) {
         super.postVisit(astNode);
         currentNode = nodeStack.pop();
-        if (currentNode.getChildren().size() == 0) {
-            currentNode.setLabel(astNode.getClass().getSimpleName());
-            currentNode.setValue(astNode.toString());
-        }
     }
 
     public Node getNode() {
-        if (nodeStack.size() == 1) {
+        if (nodeStack.size() == 1 && currentNode != null) {
             currentNode.setParent(null);
             return currentNode;
         }
@@ -313,7 +312,7 @@ public class ConvertingVisitor extends ASTVisitor {
 
     @Override
     public boolean visit(Javadoc node) {
-        return !progressMonitor.isCanceled();
+        return false;
     }
 
     @Override

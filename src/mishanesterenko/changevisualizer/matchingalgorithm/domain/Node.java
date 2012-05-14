@@ -3,6 +3,8 @@ package mishanesterenko.changevisualizer.matchingalgorithm.domain;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.eclipse.jdt.core.dom.ASTNode;
+
 /**
  * @author Michael Nesterenko
  *
@@ -16,6 +18,7 @@ public class Node {
     public Node() {
         this(null, null, null, null);
     }
+    private ASTNode wrappedNode;
 
     public Node(final Node parentNode, final String lbl, final String val, final List<Node> childrenNodes) {
         parent = parentNode;
@@ -52,4 +55,15 @@ public class Node {
         value = val;
     }
 
+    public void setAstNode(final ASTNode node) {
+        wrappedNode = node;
+    }
+
+    public ASTNode getAstNode() {
+        return wrappedNode;
+    }
+
+    public String toString() {
+        return getLabel() + " " + getValue();
+    }
 }

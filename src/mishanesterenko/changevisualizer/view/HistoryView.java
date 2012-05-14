@@ -27,11 +27,8 @@ import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.DoubleClickEvent;
 import org.eclipse.jface.viewers.IDoubleClickListener;
-import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.ISelectionChangedListener;
 import org.eclipse.jface.viewers.IStructuredSelection;
-import org.eclipse.jface.viewers.LabelProvider;
-import org.eclipse.jface.viewers.ListViewer;
 import org.eclipse.jface.viewers.SelectionChangedEvent;
 import org.eclipse.jface.viewers.TableViewer;
 import org.eclipse.jface.viewers.TableViewerColumn;
@@ -52,8 +49,6 @@ import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.Text;
-import org.eclipse.ui.ISelectionListener;
-import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.part.ViewPart;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.eclipse.swt.layout.FillLayout;
@@ -80,6 +75,8 @@ public class HistoryView extends ViewPart {
 
     public static final String LOG_ENTRY_PATH_KEY = "logEntryPath";
 
+    public static final String PROJECT_KEY = "project";
+
     public static final String VISUALIZATOR_TOPIC = "changeVisualizer/render";
 
     private Color errorColor;
@@ -104,15 +101,13 @@ public class HistoryView extends ViewPart {
 
     private SearchTextInputValidator searchTextValidator;
 
-    private ISelectionListener selectionHandler;
-
     private CustomProject currentProject;
 
     private Text showCommitCountInput;
 
     private Text commitDetailedMessageInput;
 
-    private ListViewer changedPathsViewer;
+    private TableViewer changedPathsViewer;
 
     private EventAdmin messageService;
     private Button updateCommitListButton;
@@ -139,8 +134,6 @@ public class HistoryView extends ViewPart {
         createTopPanel(parent);
         createMiddlePanel(parent);
         createBottomPanel(parent);
-
-        getSite().getWorkbenchWindow().getSelectionService().addSelectionListener(selectionHandler = new ProjectSelectionHandler());
     }
 
     private MenuManager createSearchTypeMenu() {
@@ -219,7 +212,8 @@ public class HistoryView extends ViewPart {
         commitViewer.setFilters(new ViewerFilter[] { new CommitTableFilter() });
         commitViewer.setComparator(new CommitTableSorter());
 
-        TableViewerColumn column = createTableViewerColumn("Revision", 100, 0);
+        int colNum = 0;
+        TableViewerColumn column = createTableViewerColumn(commitViewer, "Revision", 100, colNum++);
         column.setLabelProvider(new ColumnLabelProvider() {
             @Override
             public String getText(Object element) {
@@ -228,7 +222,7 @@ public class HistoryView extends ViewPart {
             }
         });
 
-        column = createTableViewerColumn("Author", 100, 1);
+        column = createTableViewerColumn(commitViewer, "Author", 100, colNum++);
         column.setLabelProvider(new ColumnLabelProvider() {
             @Override
             public String getText(Object element) {
@@ -237,7 +231,7 @@ public class HistoryView extends ViewPart {
             }
         });
 
-        column = createTableViewerColumn("Date", 100, 2);
+        column = createTableViewerColumn(commitViewer,"Date", 100, colNum++);
         column.setLabelProvider(new ColumnLabelProvider() {
             @Override
             public String getText(Object element) {
@@ -246,7 +240,7 @@ public class HistoryView extends ViewPart {
             }
         });
 
-        column = createTableViewerColumn("Message", 500, 3);
+        column = createTableViewerColumn(commitViewer,"Message", 500, colNum++);
         column.setLabelProvider(new ColumnLabelProvider() {
             @Override
             public String getText(Object element) {
@@ -264,10 +258,25 @@ public class HistoryView extends ViewPart {
     }
 
     protected void createChangedPathsList(final Composite parent) {
-        changedPathsViewer = new ListViewer(parent, SWT.BORDER | SWT.H_SCROLL | SWT.V_SCROLL);
+        changedPathsViewer = new TableViewer(parent, SWT.MULTI | SWT.H_SCROLL | SWT.V_SCROLL | SWT.FULL_SELECTION);
         changedPathsViewer.setContentProvider(ArrayContentProvider.getInstance());
         changedPathsViewer.addDoubleClickListener(new ChangedPathDblClickHandler());
-        changedPathsViewer.setLabelProvider(new LabelProvider() {
+        Table table = changedPathsViewer.getTable();
+        table.setHeaderVisible(true);
+        table.setLinesVisible(true);
+
+        int colNumber = 0;
+        TableViewerColumn column = createTableViewerColumn(changedPathsViewer, "Action", 30, colNumber++);
+        column.setLabelProvider(new ColumnLabelProvider() {
+            @Override
+            public String getText(Object element) {
+                SVNLogEntryPath path = (SVNLogEntryPath) element;
+                return "" + path.getType();
+            }
+        });
+
+        column = createTableViewerColumn(changedPathsViewer, "Path", 500, colNumber++);
+        column.setLabelProvider(new ColumnLabelProvider() {
             @Override
             public String getText(Object element) {
                 SVNLogEntryPath path = (SVNLogEntryPath) element;
@@ -298,8 +307,8 @@ public class HistoryView extends ViewPart {
         verticalSf.setWeights(new int[] {3, 1});
     }
 
-    protected TableViewerColumn createTableViewerColumn(final String title, final int bound, final int colNumber) {
-        final TableViewerColumn viewerColumn = new TableViewerColumn(commitViewer, SWT.NONE);
+    protected TableViewerColumn createTableViewerColumn(final TableViewer viewer, final String title, final int bound, final int colNumber) {
+        final TableViewerColumn viewerColumn = new TableViewerColumn(viewer, SWT.NONE);
         final TableColumn column = viewerColumn.getColumn();
         column.setText(title);
         column.setWidth(bound);
@@ -355,7 +364,6 @@ public class HistoryView extends ViewPart {
     @Override
     public void dispose() {
         searchTypeImage.dispose();
-        getSite().getWorkbenchWindow().getSelectionService().removeSelectionListener(selectionHandler);
         super.dispose();
     }
 
@@ -398,11 +406,12 @@ public class HistoryView extends ViewPart {
         } catch (Exception e) {
             Throwable cause = e.getCause();
             cause = cause == null ? e : cause;
-            Util.showError(cause, null);
+            Util.showError(cause);
             return false;
         }
     }
 
+    //TODO move it to SvnAdapter class
     @SuppressWarnings("unchecked")
     protected void loadCommits(final CustomProject project, IProgressMonitor monitor) throws SVNException {
         final int COMMIT_LOAD_PACK = 50;
@@ -459,6 +468,7 @@ public class HistoryView extends ViewPart {
         Map<String, Object> props = new HashMap<String, Object>();
         props.put(LOG_ENTRY_KEY, logEntry);
         props.put(LOG_ENTRY_PATH_KEY, path);
+        props.put(PROJECT_KEY, currentProject);
 
         Event event = new Event(VISUALIZATOR_TOPIC, props);
         messageService.postEvent(event);
@@ -549,22 +559,16 @@ public class HistoryView extends ViewPart {
         }
     }
 
-    protected class ProjectSelectionHandler implements ISelectionListener {
-        @Override
-        public void selectionChanged(IWorkbenchPart part, ISelection selection) {
-            if (selection instanceof IStructuredSelection) {
-                IStructuredSelection structuredSelection = (IStructuredSelection) selection;
-                if (structuredSelection.getFirstElement() instanceof CustomProject
-                        && (currentProject !=null && structuredSelection.getFirstElement() != currentProject
-                            || currentProject == null)) {
-                    boolean loaded = performLoadCommits((CustomProject) structuredSelection.getFirstElement());
-                    showCommitCountInput.setEnabled(loaded);
-                    searchTextInput.setEnabled(loaded);
-                    filterCommitListButton.setEnabled(loaded);
-                    updateCommitListButton.setEnabled(loaded);
-                }
-            }
+    public boolean selectProject(final CustomProject project) {
+        if (project != currentProject) {
+            boolean loaded = performLoadCommits(project);
+            showCommitCountInput.setEnabled(loaded);
+            searchTextInput.setEnabled(loaded);
+            filterCommitListButton.setEnabled(loaded);
+            updateCommitListButton.setEnabled(loaded);
+            return loaded;
         }
+        return false;
     }
 
     protected class CommitSelectionHandler implements ISelectionChangedListener {

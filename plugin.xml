@@ -145,8 +145,7 @@
           pattern="org.eclipse.ltk.ui.refactoring/org.eclipse.ltk.ui.refactoring.property.page" />
  </extension>
  <extension point="org.eclipse.ui.navigator.navigatorContent">
-    <navigatorContent
-          activeByDefault="true"
+    <navigatorContent activeByDefault="true"
           contentProvider="mishanesterenko.changevisualizer.content.provider.ProjectsContentProvider"
           id="changeVisualizer.view.projectsView.content"
           labelProvider="mishanesterenko.changevisualizer.content.provider.ProjectsLabelProvider"
@@ -158,7 +157,7 @@
          <instanceof value="mishanesterenko.changevisualizer.projectmodel.CustomProject">
          </instanceof>
        </possibleChildren>
-       <actionProvider class="mishanesterenko.changevisualizer.action.provider.CustomNewActionProvider"
+       <actionProvider class="mishanesterenko.changevisualizer.action.provider.CustomActionProvider"
             id="mishanesterenko.changevisualizer.action.provider.CustomNewActionProvider"
             dependsOn="org.eclipse.ui.navigator.resources.NewActions">
           <enablement>

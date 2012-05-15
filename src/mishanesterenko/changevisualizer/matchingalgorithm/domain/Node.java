@@ -63,6 +63,7 @@ public class Node {
         return wrappedNode;
     }
 
+    @Override
     public String toString() {
         return getLabel() + " " + getValue();
     }

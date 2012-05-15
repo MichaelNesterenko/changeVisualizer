@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.SubMonitor;
@@ -45,12 +46,16 @@ import org.tmatesoft.svn.core.SVNLogEntryPath;
 import mishanesterenko.changevisualizer.activator.ChangeVisualizerPlugin;
 import mishanesterenko.changevisualizer.common.Util;
 import org.eclipse.zest.core.widgets.Graph;
+
+import com.google.common.collect.BiMap;
+
 import mishanesterenko.changevisualizer.vcsadapter.SvnAdapter;
 import mishanesterenko.changevisualizer.matchingalgorithm.converter.ConvertingVisitor;
 import mishanesterenko.changevisualizer.matchingalgorithm.domain.Node;
 import mishanesterenko.changevisualizer.projectmodel.CustomProject;
 import mishanesterenko.changevisualizer.content.provider.GraphContentProvider;
 import mishanesterenko.changevisualizer.content.provider.GraphLabelProvider;
+import mishanesterenko.changevisualizer.matchingalgorithm.TreeMatcher;
 
 @SuppressWarnings("restriction")
 public class ChangesVisualization extends ViewPart implements IZoomableWorkbenchPart {
@@ -106,6 +111,7 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
 
     protected ASTNode buildAst(final String contents, final IProgressMonitor monitor) {
         ASTParser parser = ASTParser.newParser(AST.JLS4);
+        @SuppressWarnings("unchecked")
         Map<String, Object> options = JavaCore.getOptions();
         options.put(JavaCore.COMPILER_SOURCE, JavaCore.VERSION_1_6);
         parser.setCompilerOptions(options);
@@ -160,7 +166,7 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
                                 public void run(final IProgressMonitor monitor)
                                         throws InvocationTargetException, InterruptedException {
                                     try {
-                                        SubMonitor subMonitor = SubMonitor.convert(monitor, "Building tree from source code", 6);
+                                        SubMonitor subMonitor = SubMonitor.convert(monitor, "Building tree from source code", 7);
 
                                         long previousRevision = logEntry.getRevision() - 1;
                                         long currentRevision = logEntry.getRevision();
@@ -198,6 +204,16 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
                                         }
                                         leftViewer.setInput(getNodeList(previousNode));
                                         rightViewer.setInput(getNodeList(currentNode));
+
+                                        TreeMatcher m = new TreeMatcher(previousNode, currentNode);
+                                        m.match(subMonitor.newChild(1));
+                                        BiMap<Node, Node> matches = m.getMatches();
+                                        for(Entry<Node, Node> match : matches.entrySet()) {
+                                            Node l = match.getKey();
+                                            Node r = match.getValue();
+                                            System.out.println(l.getLabel() + "(" + l.getValue().replace("\n", "\\n") + ")    "
+                                                    + r.getLabel() + "(" + r.getValue().replace("\n", "\\n") + ")");
+                                        }
                                     } catch (SVNException e) {
                                         throw new InvocationTargetException(e);
                                     } finally {
@@ -205,6 +221,8 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
                                     }
                                 }
                             });
+                        } catch (InvocationTargetException e) {
+                            Util.showError(e.getTargetException());
                         } catch (Exception e) {
                             Util.showError(e);
                         }

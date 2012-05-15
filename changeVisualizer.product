@@ -14,6 +14,7 @@
 
    <plugins>
       <plugin id="changeVisualizer"/>
+      <plugin id="com.google.guava"/>
       <plugin id="com.ibm.icu"/>
       <plugin id="com.trilead.ssh2"/>
       <plugin id="org.eclipse.compare"/>

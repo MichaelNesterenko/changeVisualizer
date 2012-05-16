@@ -202,18 +202,16 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
                                         if (subMonitor.isCanceled()) {
                                             return;
                                         }
-                                        leftViewer.setInput(getNodeList(previousNode));
-                                        rightViewer.setInput(getNodeList(currentNode));
 
                                         TreeMatcher m = new TreeMatcher(previousNode, currentNode);
                                         m.match(subMonitor.newChild(1));
                                         BiMap<Node, Node> matches = m.getMatches();
-                                        for(Entry<Node, Node> match : matches.entrySet()) {
-                                            Node l = match.getKey();
-                                            Node r = match.getValue();
-                                            System.out.println(l.getLabel() + "(" + l.getValue().replace("\n", "\\n") + ")    "
-                                                    + r.getLabel() + "(" + r.getValue().replace("\n", "\\n") + ")");
-                                        }
+
+                                        ((GraphLabelProvider) leftViewer.getLabelProvider()).setMatchedNodes(matches);
+                                        ((GraphLabelProvider) rightViewer.getLabelProvider()).setMatchedNodes(matches);
+
+                                        leftViewer.setInput(getNodeList(previousNode));
+                                        rightViewer.setInput(getNodeList(currentNode));
                                     } catch (SVNException e) {
                                         throw new InvocationTargetException(e);
                                     } finally {

@@ -27,6 +27,12 @@ import mishanesterenko.changevisualizer.matchingalgorithm.traversal.AbstractTrav
 public class TreeMatcher {
     public static final double F = 0.5;
 
+    public static final double F_SMALL_TREE = 0.4;
+
+    public static final double F_NORMAL_TREE = 0.6;
+
+    public static final int N_SMALL_TREE = 4;
+
     public static final int NGRAM = 2;
 
     private List<Entry<Double, Entry<Node, Node>>> matches;
@@ -41,14 +47,15 @@ public class TreeMatcher {
 
     private IProgressMonitor currentMonitor;
 
-    private NodeFilter leafFilter = new NodeFilter() {
-        @Override
-        public boolean accept(final Node node) {
-            return node.getChildren().size() == 0;
-        }
-    };
+    private NodeFilter leafFilter = new LeafFilter();
 
     private Action leftLeafAction;
+
+    private Action leftNodeAction;
+
+    private PostOrderDepthTraversal rightTraversal;
+
+    NonMatchedNodeFilter nonMatchedNodeFilter = new NonMatchedNodeFilter();
 
     private Comparator<Entry<Double, Entry<Node, Node>>> matchComparator = new Comparator<Entry<Double, Entry<Node, Node>>>() {
         @Override
@@ -61,36 +68,57 @@ public class TreeMatcher {
         leftRoot = leftNode;
         rightRoot = rightNode;
         matches = new ArrayList<Entry<Double,Entry<Node,Node>>>();
+        resultingMatches = HashBiMap.create();
 
-        leftLeafAction = new Action() {
-            private PostOrderDepthTraversal rightTraversal = new PostOrderDepthTraversal(rightRoot);
-
-            private Node leftNode;
-
+        rightTraversal = new PostOrderDepthTraversal(rightRoot);
+        leftLeafAction = new AbstractLeftAction() {
             private Action rightLeafAction = new Action() {
                 @Override
                 public void apply(final Node node) {
                     if (currentMonitor.isCanceled()) {
                         return;
                     }
-                    double sim = similarity(leftNode.getValue(), node.getValue());
-                    if (sim >= F) {
-                        matches.add(new SimpleEntry<Double, Entry<Node, Node>>(sim, new SimpleEntry<Node, Node>(leftNode, node)));
+                    double sim;
+                    if (getLeftNode().getLabel().equals(node.getLabel())
+                            && (sim = leafSimilarity(getLeftNode().getValue(), node.getValue())) >= F) {
+                        matches.add(
+                                new SimpleEntry<Double, Entry<Node, Node>>(sim, new SimpleEntry<Node, Node>(getLeftNode(), node)));
                     }
                 }
             };
 
             @Override
-            public void apply(final Node node) {
-                if (currentMonitor.isCanceled()) {
-                    return;
+            protected Action getRightAction() {
+                return rightLeafAction;
+            }
+
+            @Override
+            protected NodeFilter getFilter() {
+                return leafFilter;
+            }
+        };
+
+        leftNodeAction = new AbstractLeftAction() {
+            private Action rightNodeAction = new Action() {
+                @Override
+                public void apply(final Node node) {
+                    if (resultingMatches.containsKey(getLeftNode()) || resultingMatches.containsValue(node)) {
+                        return;
+                    }
+                    if (equal(getLeftNode(), node)) {
+                        resultingMatches.put(getLeftNode(), node);
+                    }
                 }
-                try {
-                    leftNode = node;
-                    rightTraversal.foreach(rightLeafAction, leafFilter);
-                } finally {
-                    leftNode = null;
-                }
+            };
+
+            @Override
+            protected Action getRightAction() {
+                return rightNodeAction;
+            }
+
+            @Override
+            protected NodeFilter getFilter() {
+                return nonMatchedNodeFilter;
             }
         };
 
@@ -126,18 +154,20 @@ public class TreeMatcher {
                 resultingMatches.put(l, r);
             }
             matches = null;
+
+            leftTraversal.foreach(leftNodeAction, nonMatchedNodeFilter);
         } finally {
             currentMonitor.done();
             currentMonitor = null;
         }
     }
 
-    protected double internalSimilarity(final String l, final String r, final int nGram) {
+    protected double internalLeafSimilarity(final String l, final String r, final int nGram) {
         if (nGram <= 0) {
             return 0;
         }
         if (l.length() < nGram || r.length() < nGram) {
-            return internalSimilarity(l, r, nGram - 1);
+            return internalLeafSimilarity(l, r, nGram - 1);
         }
         String[] lNGrams = new String[l.length() - nGram + 1];
         String[] rNGrams = new String[r.length() - nGram + 1];
@@ -165,15 +195,89 @@ public class TreeMatcher {
         return (double) 2 * simCount / (lNGrams.length + rNGrams.length);
     }
 
-    protected double similarity(final String l, final String r) {
-        return internalSimilarity(l, r, NGRAM);
+    protected double leafSimilarity(final String l, final String r) {
+        return internalLeafSimilarity(l, r, NGRAM);
     }
 
-    protected double getSimilarity(final Node left, final Node right) {
-        if (!left.getLabel().equals(right.getLabel()) && (left.getChildren().size() != 0 && right.getChildren().size() == 0
-                || left.getChildren().size() == 0 && right.getChildren().size() != 0)) {
-            return 0;
+    protected double nodeSimilarity(final Node l, final Node r) {
+        if (l.getLabel().equals(r.getLabel())) {
+            final int max = Math.max(l.getChildren().size(), r.getChildren().size());
+            int common = 0;
+            Set<Node> matchedSet = new HashSet<Node>();
+            for (Node child : l.getChildren()) {
+                Node companion = resultingMatches.get(child);
+                if (companion != null && companion.getParent() == r
+                        && !matchedSet.contains(child) && !matchedSet.contains(companion)) {
+                    matchedSet.add(child);
+                    matchedSet.add(companion);
+                    common++;
+                }
+            }
+            for (Node child : r.getChildren()) {
+                Node companion = resultingMatches.get(child);
+                if (companion != null && companion.getParent() == l
+                        && !matchedSet.contains(child) && !matchedSet.contains(companion)) {
+                    matchedSet.add(child);
+                    matchedSet.add(companion);
+                    common++;
+                }
+            }
+            return (double) common / max;
         }
         return 0;
+    }
+
+    protected boolean equal(final Node l, final Node r) {
+        final double f = Math.min(l.getChildren().size(), r.getChildren().size()) <= N_SMALL_TREE ? F_SMALL_TREE : F_NORMAL_TREE;
+        return nodeSimilarity(l, r) >= f;
+    }
+
+    protected class NonMatchedNodeFilter extends LeafFilter {
+        //private BiMap<Node, Node> matchedNodes;
+
+//        public NonMatchedNodeFilter(final BiMap<Node, Node> matched) {
+//            matchedNodes = matched;
+//        }
+
+        @Override
+        public boolean accept(final Node node) {
+            return !super.accept(node) && !resultingMatches.containsKey(node) && !resultingMatches.containsValue(node);
+        }
+    }
+
+    protected class LeafFilter extends NodeFilter {
+        @Override
+        public boolean accept(final Node node) {
+            return node.getChildren().size() == 0;
+        }
+    }
+
+    protected abstract class AbstractLeftAction extends Action {
+        private Node leftNode;
+
+        protected void setLeftNode(final Node node) {
+            leftNode = node;
+        }
+
+        protected Node getLeftNode() {
+            return leftNode;
+        }
+
+        protected abstract Action getRightAction();
+
+        protected abstract NodeFilter getFilter();
+
+        @Override
+        public void apply(final Node node) {
+            if (currentMonitor.isCanceled()) {
+                return;
+            }
+            try {
+                setLeftNode(node);
+                rightTraversal.foreach(getRightAction(), getFilter());
+            } finally {
+                setLeftNode(null);
+            }
+        }
     }
 }

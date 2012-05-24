@@ -5,14 +5,19 @@ import java.util.Set;
 import org.eclipse.draw2d.IFigure;
 import org.eclipse.draw2d.Label;
 import org.eclipse.draw2d.LineBorder;
+import org.eclipse.draw2d.MouseEvent;
+import org.eclipse.draw2d.MouseListener;
+import org.eclipse.jface.dialogs.PopupDialog;
 import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Shell;
 import org.eclipse.zest.core.viewers.IFigureProvider;
 
 import com.google.common.collect.BiMap;
 
+import mishanesterenko.changevisualizer.dialog.MouseLocationPopupDialog;
 import mishanesterenko.changevisualizer.matchingalgorithm.domain.Node;
 
 public class GraphLabelProvider extends LabelProvider implements IFigureProvider {
@@ -32,8 +37,11 @@ public class GraphLabelProvider extends LabelProvider implements IFigureProvider
 
     private boolean isLeftGraph;
 
-    public GraphLabelProvider(final boolean isLeftGraph ) {
+    private Shell viewerShell;
+
+    public GraphLabelProvider(final boolean isLeftGraph, final Shell shell) {
         this.isLeftGraph = isLeftGraph;
+        viewerShell = shell;
     }
 
     /**
@@ -69,37 +77,30 @@ public class GraphLabelProvider extends LabelProvider implements IFigureProvider
     }
 
     @Override
-    public IFigure getFigure(Object element) {
-        final Display d = Display.getDefault();
+    public IFigure getFigure(final Object element) {
+        final Node node = (Node) element;
         final Label l = new Label(getText(element));
+        
         l.setOpaque(true);
-        l.setFont(d.getSystemFont());
+        l.setFont(viewerShell.getDisplay().getSystemFont());
         l.setSize(l.getPreferredSize());
-        l.setBackgroundColor(determineColor((Node) element));
+        l.setBackgroundColor(determineColor(node));
         l.setBorder(new LineBorder(2));
-//        l.addMouseMotionListener(new MouseMotionListener() {
-//            @Override
-//            public void mouseMoved(MouseEvent me) {
-//            }
-//
-//            @Override
-//            public void mouseHover(MouseEvent me) {
-//            }
-//
-//            @Override
-//            public void mouseExited(MouseEvent me) {
-//                l.setBackgroundColor(d.getSystemColor(SWT.COLOR_BLUE));
-//            }
-//
-//            @Override
-//            public void mouseEntered(MouseEvent me) {
-//                l.setBackgroundColor(d.getSystemColor(SWT.COLOR_GREEN));
-//            }
-//
-//            @Override
-//            public void mouseDragged(MouseEvent me) {
-//            }
-//        });
+        l.addMouseListener(new MouseListener() {
+            @Override
+            public void mousePressed(final MouseEvent me) {
+            }
+
+            @Override
+            public void mouseReleased(final MouseEvent me) {
+            }
+
+            @Override
+            public void mouseDoubleClicked(final MouseEvent me) {
+                MouseLocationPopupDialog d = new MouseLocationPopupDialog(viewerShell, node.getValue());
+                d.open();
+            }
+        });
         return l;
     }
 

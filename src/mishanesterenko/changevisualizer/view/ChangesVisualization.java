@@ -78,7 +78,11 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
         rightViewer = createGraphViewer(sf, false);
 
         leftViewer.getZoomManager().addZoomListener(new ZoomChangedHandler());
-        leftViewer.getZoomManager().setZoomLevels(new double[] {0.1, 0.15, 0.20, 0.25, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 1});
+        { // zoom levels
+            double[] zoomLevels = new double[] {0.1, 0.15, 0.20, 0.25, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 1};
+            leftViewer.getZoomManager().setZoomLevels(zoomLevels);
+            rightViewer.getZoomManager().setZoomLevels(zoomLevels);
+        }
 
         IToolBarManager toolbarManager = getViewSite().getActionBars().getToolBarManager();
         toolbarManager.add(new ZoomContributionViewItem(this));
@@ -95,7 +99,7 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
             graphViewer.getGraphControl().addMouseListener(mouseHandler);
         }
         graphViewer.setContentProvider(new GraphContentProvider());
-        graphViewer.setLabelProvider(new GraphLabelProvider(isLeftGraph));
+        graphViewer.setLabelProvider(new GraphLabelProvider(isLeftGraph, graphViewer.getControl().getShell()));
         return graphViewer;
     }
 
@@ -217,7 +221,7 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
                                             leftProvider.setMatchedNodes(matches, leftNodes);
                                             rightProvider.setMatchedNodes(matches, rightNodes);
 
-                                            final int heightPerNode = 100;
+                                            final int heightPerNode = 90;
                                             final int widthPerNode = 250;
                                             leftViewer.getGraphControl().setPreferredSize(
                                                     widthPerNode * TreeUtil.computeBreadth(previousNode),

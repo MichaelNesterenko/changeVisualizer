@@ -439,7 +439,8 @@ public class HistoryView extends ViewPart {
                 long fromRevision = logEntry.getRevision();
                 monitor.worked(logEntries.size());
                 while (!monitor.isCanceled() && fromRevision > 1 && logEntries.size() < showCommitCount) {
-                    long probableRevision = fromRevision - Math.min(showCommitCount - logEntries.size(), COMMIT_LOAD_PACK);
+                    long probableRevision = Math.max(fromRevision - 
+                            Math.min(showCommitCount - logEntries.size(), COMMIT_LOAD_PACK), 1);
                     Collection<SVNLogEntry> moreLogEntries =
                             repository.log(new String[] {""}, null, probableRevision, fromRevision - 1, true, true);
                     monitor.worked(moreLogEntries.size());
@@ -447,7 +448,6 @@ public class HistoryView extends ViewPart {
                     fromRevision = probableRevision;
                 }
                 logEntryArray.addAll(logEntries);
-                Collections.reverse(logEntryArray);
             }
             if (!monitor.isCanceled()) {
                 Display.getDefault().syncExec(new Runnable() {

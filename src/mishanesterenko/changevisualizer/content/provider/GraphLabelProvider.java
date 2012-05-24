@@ -1,9 +1,13 @@
 package mishanesterenko.changevisualizer.content.provider;
 
+import java.util.Set;
+
 import org.eclipse.draw2d.IFigure;
 import org.eclipse.draw2d.Label;
+import org.eclipse.draw2d.LineBorder;
 import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.zest.core.viewers.IFigureProvider;
 
@@ -12,7 +16,25 @@ import com.google.common.collect.BiMap;
 import mishanesterenko.changevisualizer.matchingalgorithm.domain.Node;
 
 public class GraphLabelProvider extends LabelProvider implements IFigureProvider {
+    private static final int UPDATED_COLOR = SWT.COLOR_YELLOW;
+
+    private static final int MOVED_COLOR = SWT.COLOR_BLUE;
+
+    private static final int ADDED_COLOR = SWT.COLOR_GREEN;
+
+    private static final int DELETED_COLOR = SWT.COLOR_RED;
+
+    private static final int UNCHANGED_COLOR = SWT.COLOR_WHITE;
+
     private BiMap<Node, Node> matchedNodes;
+
+    private Set<Node> owningNodes;
+
+    private boolean isLeftGraph;
+
+    public GraphLabelProvider(final boolean isLeftGraph ) {
+        this.isLeftGraph = isLeftGraph;
+    }
 
     /**
      * @return the matchedNodes
@@ -21,11 +43,16 @@ public class GraphLabelProvider extends LabelProvider implements IFigureProvider
         return matchedNodes;
     }
 
+    public Set<Node> getOwningNodes() {
+        return owningNodes;
+    }
+
     /**
      * @param matchedNodes the matchedNodes to set
      */
-    public void setMatchedNodes(BiMap<Node, Node> matchedNodes) {
+    public void setMatchedNodes(final BiMap<Node, Node> matchedNodes, final Set<Node> ownNodes) {
         this.matchedNodes = matchedNodes;
+        owningNodes = ownNodes;
     }
 
     @Override
@@ -48,8 +75,8 @@ public class GraphLabelProvider extends LabelProvider implements IFigureProvider
         l.setOpaque(true);
         l.setFont(d.getSystemFont());
         l.setSize(l.getPreferredSize());
-        l.setBackgroundColor(d.getSystemColor(matchedNodes.containsKey(element) || matchedNodes.containsValue(element)
-                ? SWT.COLOR_GREEN : SWT.COLOR_RED));
+        l.setBackgroundColor(determineColor((Node) element));
+        l.setBorder(new LineBorder(2));
 //        l.addMouseMotionListener(new MouseMotionListener() {
 //            @Override
 //            public void mouseMoved(MouseEvent me) {
@@ -74,5 +101,28 @@ public class GraphLabelProvider extends LabelProvider implements IFigureProvider
 //            }
 //        });
         return l;
+    }
+
+    protected Color determineColor(final Node node) {
+        int foundColor = UNCHANGED_COLOR;
+        if (isLeftGraph) {
+            foundColor = matchedNodes.containsKey(node) ? foundColor : DELETED_COLOR;
+        } else {
+            if (matchedNodes.containsValue(node)) {
+                Node leftNode = matchedNodes.inverse().get(node);
+                if (!leftNode.getValue().equals(node.getValue())) {
+                    foundColor = UPDATED_COLOR;
+                }
+                { // move detection
+                    Node leftMatchedParent = matchedNodes.inverse().get(node).getParent();
+                    if (leftMatchedParent != leftNode.getParent()) {
+                        foundColor = MOVED_COLOR;
+                    }
+                }
+            } else {
+                foundColor = ADDED_COLOR;
+            }
+        }
+        return Display.getDefault().getSystemColor(foundColor);
     }
 }

@@ -1,11 +1,10 @@
 package mishanesterenko.changevisualizer.view;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Hashtable;
-import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
+import java.util.Set;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.SubMonitor;
@@ -56,6 +55,7 @@ import mishanesterenko.changevisualizer.projectmodel.CustomProject;
 import mishanesterenko.changevisualizer.content.provider.GraphContentProvider;
 import mishanesterenko.changevisualizer.content.provider.GraphLabelProvider;
 import mishanesterenko.changevisualizer.matchingalgorithm.TreeMatcher;
+import mishanesterenko.changevisualizer.matchingalgorithm.TreeUtil;
 
 @SuppressWarnings("restriction")
 public class ChangesVisualization extends ViewPart implements IZoomableWorkbenchPart {
@@ -74,28 +74,28 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
         ctx.registerService(new String[] { EventHandler.class.getName() }, new MessageHandler(), props);
 
         SashForm sf = new SashForm(parent, SWT.HORIZONTAL);
-        leftViewer = createGraphViewer(sf);
-        rightViewer = createGraphViewer(sf);
+        leftViewer = createGraphViewer(sf, true);
+        rightViewer = createGraphViewer(sf, false);
 
         leftViewer.getZoomManager().addZoomListener(new ZoomChangedHandler());
+        leftViewer.getZoomManager().setZoomLevels(new double[] {0.1, 0.15, 0.20, 0.25, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 1});
 
         IToolBarManager toolbarManager = getViewSite().getActionBars().getToolBarManager();
         toolbarManager.add(new ZoomContributionViewItem(this));
     }
 
-    protected CustomGraphViewer createGraphViewer(final Composite parent) {
+    protected CustomGraphViewer createGraphViewer(final Composite parent, final boolean isLeftGraph) {
         final CustomGraphViewer graphViewer = new CustomGraphViewer(parent, SWT.NONE);
         graphViewer.setNodeStyle(ZestStyles.NODES_NO_LAYOUT_RESIZE);
         graphViewer.getGraphControl().getVerticalBar().addSelectionListener(new GraphScrollHandler());
         graphViewer.getGraphControl().getHorizontalBar().addSelectionListener(new GraphScrollHandler());
-        graphViewer.getGraphControl().setPreferredSize(50000, 1500);
         {
             GraphMouseHandler mouseHandler = new GraphMouseHandler();
             graphViewer.getGraphControl().addMouseMoveListener(mouseHandler);
             graphViewer.getGraphControl().addMouseListener(mouseHandler);
         }
         graphViewer.setContentProvider(new GraphContentProvider());
-        graphViewer.setLabelProvider(new GraphLabelProvider());
+        graphViewer.setLabelProvider(new GraphLabelProvider(isLeftGraph));
         return graphViewer;
     }
 
@@ -127,11 +127,11 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
         return converter.getNode();
     }
 
-    protected List<Node> getNodeList(final Node n) {
-        List<Node> nodes = new ArrayList<Node>();
+    protected Set<Node> getNodeSet(final Node n) {
+        Set<Node> nodes = new HashSet<Node>();
         nodes.add(n);
         for (Node child : n.getChildren()) {
-            nodes.addAll(getNodeList(child));
+            nodes.addAll(getNodeSet(child));
         }
         return nodes;
     }
@@ -207,11 +207,28 @@ public class ChangesVisualization extends ViewPart implements IZoomableWorkbench
                                         m.match(subMonitor.newChild(1));
                                         BiMap<Node, Node> matches = m.getMatches();
 
-                                        ((GraphLabelProvider) leftViewer.getLabelProvider()).setMatchedNodes(matches);
-                                        ((GraphLabelProvider) rightViewer.getLabelProvider()).setMatchedNodes(matches);
+                                        Set<Node> leftNodes = getNodeSet(previousNode);
+                                        Set<Node> rightNodes = getNodeSet(currentNode);
 
-                                        leftViewer.setInput(getNodeList(previousNode));
-                                        rightViewer.setInput(getNodeList(currentNode));
+                                        { // viewer initialization
+                                            GraphLabelProvider leftProvider = (GraphLabelProvider) leftViewer.getLabelProvider();
+                                            GraphLabelProvider rightProvider = (GraphLabelProvider) rightViewer.getLabelProvider();
+
+                                            leftProvider.setMatchedNodes(matches, leftNodes);
+                                            rightProvider.setMatchedNodes(matches, rightNodes);
+
+                                            final int heightPerNode = 100;
+                                            final int widthPerNode = 250;
+                                            leftViewer.getGraphControl().setPreferredSize(
+                                                    widthPerNode * TreeUtil.computeBreadth(previousNode),
+                                                    heightPerNode * TreeUtil.computeDepth(previousNode));
+                                            rightViewer.getGraphControl().setPreferredSize(
+                                                    widthPerNode * TreeUtil.computeBreadth(currentNode),
+                                                    heightPerNode * TreeUtil.computeDepth(currentNode));
+                                        }
+
+                                        leftViewer.setInput(leftNodes);
+                                        rightViewer.setInput(rightNodes);
                                     } catch (SVNException e) {
                                         throw new InvocationTargetException(e);
                                     } finally {
